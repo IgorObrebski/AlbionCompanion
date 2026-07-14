@@ -1,0 +1,44 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+artifacts/
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## VS Code
+.vscode/
+
+## App data / local secrets
+appsettings.*.local.json
+*.local.json
+
+## SQLite runtime data
+*.db
+*.db-shm
+*.db-wal
+
+## Logs
+*.log
+debug_packets.log
+
+## NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+
+## OS
+Thumbs.db
+.DS_Store
