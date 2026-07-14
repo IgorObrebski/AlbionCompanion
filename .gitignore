@@ -42,3 +42,6 @@ debug_packets.log
 ## OS
 Thumbs.db
 .DS_Store
+
+## Debug screenshots
+specs/*.png
