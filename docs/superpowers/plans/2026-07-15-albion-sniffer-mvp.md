@@ -629,13 +629,13 @@ public class PacketSniffer : IPacketSniffer
     {
         foreach (var device in CaptureDeviceList.Instance)
         {
-            device.Filter = CaptureFilter;
             device.OnPacketArrival += HandlePacketArrival;
             device.Open(new DeviceConfiguration
             {
                 Mode = DeviceModes.Promiscuous,
                 ReadTimeout = 1000
             });
+            device.Filter = CaptureFilter;
             device.StartCapture();
             _devices.Add(device);
         }
