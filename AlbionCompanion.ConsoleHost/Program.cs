@@ -30,6 +30,12 @@ var photonParser = provider.GetRequiredService<IPhotonParser>();
 var sniffer = provider.GetRequiredService<IPacketSniffer>();
 sniffer.OnPhotonPayloadReceived += (_, payload) => photonParser.HandlePayload(payload);
 
+Console.WriteLine("Network devices Npcap can see:");
+foreach (var device in SharpPcap.CaptureDeviceList.Instance)
+{
+    Console.WriteLine($"  - {device.Name} ({device.Description})");
+}
+
 Console.WriteLine($"AlbionCompanion Sniffer (debug logging mode). Writing to: {logPath}");
 Console.WriteLine("Start Albion Online and go gathering. Press ENTER here to stop.");
 sniffer.Start();
