@@ -766,6 +766,22 @@ public class AlbionPhotonParserTests
 
         Assert.Null(exception);
     }
+
+    [Fact]
+    public void HandlePayload_DoesNotThrow_WhenUnderlyingParserFailsOnMalformedCommand()
+    {
+        // 12-byte Photon header (peerId=0, flags=0, commandCount=1, timestamp=0, challenge=0) with
+        // no bytes left for the command it announces - PhotonPackageParser throws IndexOutOfRangeException
+        // reading past the array. Real Albion traffic hits an equivalent library limitation (unimplemented
+        // Photon parameter type codes, e.g. type code 153) - either way, one bad payload must not kill the sniffer.
+        var malformedPayload = new byte[12];
+        malformedPayload[3] = 1; // commandCount = 1, but no bytes follow for that command
+        var parser = new AlbionPhotonParser();
+
+        var exception = Record.Exception(() => parser.HandlePayload(malformedPayload));
+
+        Assert.Null(exception);
+    }
 }
 ```
 
@@ -817,7 +833,19 @@ public class AlbionPhotonParser : PhotonParser, IPhotonParser
     public event EventHandler<PhotonEvent>? OnEventReceived;
     public event EventHandler<PhotonResponse>? OnResponseReceived;
 
-    public void HandlePayload(byte[] payload) => ReceivePacket(payload);
+    public void HandlePayload(byte[] payload)
+    {
+        try
+        {
+            ReceivePacket(payload);
+        }
+        catch (Exception)
+        {
+            // PhotonPackageParser doesn't implement every Photon parameter type code Albion sends
+            // (e.g. type code 153), and malformed/truncated captures can also throw mid-parse.
+            // One bad payload must not stop the sniffer from processing the rest of the traffic.
+        }
+    }
 
     protected override void OnEvent(byte code, Dictionary<byte, object> parameters) =>
         OnEventReceived?.Invoke(this, new PhotonEvent(code, parameters));

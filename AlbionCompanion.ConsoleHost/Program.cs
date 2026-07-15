@@ -3,50 +3,6 @@ using AlbionCompanion.Sniffer.Npcap;
 using AlbionCompanion.Sniffer.PacketCapture;
 using AlbionCompanion.Sniffer.Protocol16;
 using Microsoft.Extensions.DependencyInjection;
-using PacketDotNet;
-using SharpPcap;
-
-// TEMPORARY DIAGNOSTIC: set ALBION_DEBUG_PORTS=1 to capture all UDP traffic (no port filter)
-// and print each distinct (sourcePort -> destinationPort) pair seen, to find the real ports
-// Albion Online uses if 5055/5056 turn out to be stale. Remove once ports are confirmed.
-if (Environment.GetEnvironmentVariable("ALBION_DEBUG_PORTS") == "1")
-{
-    Console.WriteLine("DEBUG MODE: capturing ALL UDP traffic (no port filter). Press ENTER to stop.");
-    var seenPortPairs = new HashSet<(ushort Source, ushort Destination)>();
-    var debugDevices = new List<ILiveDevice>();
-
-    foreach (var device in CaptureDeviceList.Instance)
-    {
-        device.OnPacketArrival += (_, e) =>
-        {
-            var udpPacket = e.GetPacket().GetPacket().Extract<UdpPacket>();
-            if (udpPacket is null)
-            {
-                return;
-            }
-
-            var key = (udpPacket.SourcePort, udpPacket.DestinationPort);
-            if (seenPortPairs.Add(key))
-            {
-                Console.WriteLine($"UDP {udpPacket.SourcePort} -> {udpPacket.DestinationPort} ({udpPacket.PayloadData.Length} bytes) on {device.Name}");
-            }
-        };
-        device.Open(new DeviceConfiguration { Mode = DeviceModes.Promiscuous, ReadTimeout = 1000 });
-        device.Filter = "udp";
-        device.StartCapture();
-        debugDevices.Add(device);
-    }
-
-    Console.ReadLine();
-
-    foreach (var device in debugDevices)
-    {
-        device.StopCapture();
-        device.Close();
-    }
-
-    return;
-}
 
 var services = new ServiceCollection();
 
@@ -72,18 +28,7 @@ _ = provider.GetRequiredService<AlbionEventLogger>();
 
 var photonParser = provider.GetRequiredService<IPhotonParser>();
 var sniffer = provider.GetRequiredService<IPacketSniffer>();
-sniffer.OnPhotonPayloadReceived += (_, payload) =>
-{
-    try
-    {
-        photonParser.HandlePayload(payload);
-    }
-    catch (Exception ex)
-    {
-        // TEMPORARY DIAGNOSTIC: surface parse failures instead of letting them vanish on the capture thread.
-        Console.WriteLine($"HandlePayload threw for a {payload.Length}-byte payload: {ex}");
-    }
-};
+sniffer.OnPhotonPayloadReceived += (_, payload) => photonParser.HandlePayload(payload);
 
 Console.WriteLine("Network devices Npcap can see:");
 foreach (var device in SharpPcap.CaptureDeviceList.Instance)
