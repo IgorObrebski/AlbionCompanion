@@ -72,7 +72,18 @@ _ = provider.GetRequiredService<AlbionEventLogger>();
 
 var photonParser = provider.GetRequiredService<IPhotonParser>();
 var sniffer = provider.GetRequiredService<IPacketSniffer>();
-sniffer.OnPhotonPayloadReceived += (_, payload) => photonParser.HandlePayload(payload);
+sniffer.OnPhotonPayloadReceived += (_, payload) =>
+{
+    try
+    {
+        photonParser.HandlePayload(payload);
+    }
+    catch (Exception ex)
+    {
+        // TEMPORARY DIAGNOSTIC: surface parse failures instead of letting them vanish on the capture thread.
+        Console.WriteLine($"HandlePayload threw for a {payload.Length}-byte payload: {ex}");
+    }
+};
 
 Console.WriteLine("Network devices Npcap can see:");
 foreach (var device in SharpPcap.CaptureDeviceList.Instance)
