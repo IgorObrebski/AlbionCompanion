@@ -653,7 +653,7 @@ public class PacketSniffer : IPacketSniffer
         _devices.Clear();
     }
 
-    private void HandlePacketArrival(object sender, PacketCapture e)
+    private void HandlePacketArrival(object sender, SharpPcap.PacketCapture e)
     {
         var rawCapture = e.GetPacket();
         var packet = rawCapture.GetPacket();
