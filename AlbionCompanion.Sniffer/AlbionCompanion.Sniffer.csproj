@@ -12,4 +12,8 @@
     <PackageReference Include="SharpPcap" Version="6.3.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="AlbionCompanion.Sniffer.Tests" />
+  </ItemGroup>
+
 </Project>
