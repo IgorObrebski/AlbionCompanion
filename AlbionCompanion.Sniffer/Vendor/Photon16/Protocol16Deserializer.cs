@@ -4,10 +4,20 @@
 // ArgumentException for any Photon parameter type code not in Protocol16Type,
 // which includes every application-specific "custom type" (Albion Online
 // registers several). That aborted deserialization of the *entire* event for
-// one unrecognized parameter. Following the pattern used by ao-data/photon-spectator
-// (the decoder behind albiondata-client), an unrecognized type now yields a
-// placeholder value/type instead of throwing, so the rest of the event's
-// parameters - and the event code itself - still come through.
+// one unrecognized parameter. An unrecognized type now yields an
+// UnsupportedPhotonValue marker instead of throwing - but since we don't know
+// how many bytes that type's encoding occupies on the wire, we also can't know
+// where the *next* parameter starts. DeserializeParameterTable therefore stops
+// consuming further parameters as soon as it hits one, instead of reading
+// subsequent bytes as if they were still aligned (which produced cascading
+// garbage - confirmed via manual e2e run against real Albion Online traffic).
+// CA2022 (inexact Stream.Read) is suppressed file-wide: Protocol16Stream.Read is a plain
+// in-memory buffer copy (Buffer.BlockCopy), not a network/file stream that can short-read
+// for unrelated reasons, so the returned count is always the requested count unless the
+// buffer is genuinely exhausted - which the surrounding parse logic already treats as
+// end-of-data via other means.
+#pragma warning disable CA2022
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -17,6 +27,20 @@ using Protocol16.Photon;
 
 namespace Protocol16
 {
+    /// <summary>
+    /// Marks a Photon parameter whose type code isn't implemented (e.g. an
+    /// application-specific "custom type" Albion Online registers). We deliberately
+    /// don't know how to read its value, so no bytes are consumed for it.
+    /// </summary>
+    public sealed class UnsupportedPhotonValue
+    {
+        public byte TypeCode { get; }
+
+        public UnsupportedPhotonValue(byte typeCode) => TypeCode = typeCode;
+
+        public override string ToString() => $"<unsupported Photon type code {TypeCode}>";
+    }
+
     public static class Protocol16Deserializer
     {
         private static readonly ThreadLocal<byte[]> _byteBuffer = new ThreadLocal<byte[]>(() => new byte[sizeof(long)]);
@@ -71,11 +95,9 @@ namespace Protocol16
                 case Protocol16Type.ObjectArray:
                     return DeserializeObjectArray(input);
                 default:
-                    // Unrecognized/custom Photon type code (e.g. an application-specific type
-                    // Albion Online registers). We don't know its wire format, so we can't
-                    // safely read past it - but we also can't know how many bytes to skip.
-                    // Surface it as a marker value rather than throwing and losing the whole event.
-                    return $"<unsupported Photon type code {typeCode}>";
+                    // See UnsupportedPhotonValue: we don't know this type's wire format, so no
+                    // bytes are consumed - the caller must stop reading further parameters.
+                    return new UnsupportedPhotonValue(typeCode);
             }
         }
 
@@ -336,6 +358,13 @@ namespace Protocol16
                 {
                     output[key] = value;
                 }
+
+                if (key is UnsupportedPhotonValue || value is UnsupportedPhotonValue)
+                {
+                    // Same reasoning as DeserializeParameterTable: an unknown type means we
+                    // don't know where the next element starts, so stop here.
+                    break;
+                }
             }
         }
 
@@ -459,6 +488,14 @@ namespace Protocol16
                 byte valueTypeCode = (byte)input.ReadByte();
                 object? value = Deserialize(input, valueTypeCode);
                 dictionary[key] = value;
+
+                if (value is UnsupportedPhotonValue)
+                {
+                    // We don't know how many bytes this parameter's value occupies, so we
+                    // don't know where the next key/type pair starts either. Reading further
+                    // would just interpret unrelated bytes as parameters - stop here instead.
+                    break;
+                }
             }
 
             return dictionary;

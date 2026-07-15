@@ -56,11 +56,11 @@ namespace PhotonPackageParser
             }
         }
 
-        protected abstract void OnRequest(byte operationCode, Dictionary<byte, object> parameters);
+        protected abstract void OnRequest(byte operationCode, Dictionary<byte, object?> parameters);
 
-        protected abstract void OnResponse(byte operationCode, short returnCode, string debugMessage, Dictionary<byte, object> parameters);
+        protected abstract void OnResponse(byte operationCode, short returnCode, string debugMessage, Dictionary<byte, object?> parameters);
 
-        protected abstract void OnEvent(byte code, Dictionary<byte, object> parameters);
+        protected abstract void OnEvent(byte code, Dictionary<byte, object?> parameters);
 
         private void HandleCommand(byte[] source, ref int offset)
         {
@@ -181,7 +181,7 @@ namespace PhotonPackageParser
 
         private SegmentedPackage GetSegmentedPackage(int startSequenceNumber, int totalLength)
         {
-            if (_pendingSegments.TryGetValue(startSequenceNumber, out SegmentedPackage segmentedPackage))
+            if (_pendingSegments.TryGetValue(startSequenceNumber, out var segmentedPackage))
             {
                 return segmentedPackage;
             }

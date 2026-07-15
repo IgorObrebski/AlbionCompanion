@@ -23,7 +23,7 @@ public class AlbionEventLogger
 
     private string Timestamp() => _nowProvider().ToString("yyyy-MM-dd HH:mm:ss.fff");
 
-    private static string FormatParams(Dictionary<byte, object> parameters) =>
+    private static string FormatParams(Dictionary<byte, object?> parameters) =>
         "{" + string.Join(", ", parameters.Select(kv => $"{kv.Key}:{kv.Value}")) + "}";
 
     private async Task WriteLineAsync(string line)

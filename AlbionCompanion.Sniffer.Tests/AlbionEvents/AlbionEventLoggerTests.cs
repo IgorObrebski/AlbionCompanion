@@ -20,7 +20,7 @@ public class AlbionEventLoggerTests
         var fixedTime = new DateTime(2026, 7, 15, 10, 30, 0, 123);
         var logger = new AlbionEventLogger(new FakePhotonParser(), logPath, () => fixedTime);
 
-        await logger.WriteEventAsync(new PhotonEvent(42, new Dictionary<byte, object> { [0] = "T4_ORE", [1] = 5 }));
+        await logger.WriteEventAsync(new PhotonEvent(42, new Dictionary<byte, object?> { [0] = "T4_ORE", [1] = 5 }));
 
         var lines = await File.ReadAllLinesAsync(logPath);
         Assert.Equal(new[] { "[2026-07-15 10:30:00.123] EVENT code=42 params={0:T4_ORE, 1:5}" }, lines);
@@ -35,7 +35,7 @@ public class AlbionEventLoggerTests
         var fixedTime = new DateTime(2026, 7, 15, 10, 30, 1, 5);
         var logger = new AlbionEventLogger(new FakePhotonParser(), logPath, () => fixedTime);
 
-        await logger.WriteResponseAsync(new PhotonResponse(7, 1, "debug", new Dictionary<byte, object> { [0] = "OK" }));
+        await logger.WriteResponseAsync(new PhotonResponse(7, 1, "debug", new Dictionary<byte, object?> { [0] = "OK" }));
 
         var lines = await File.ReadAllLinesAsync(logPath);
         Assert.Equal(new[] { "[2026-07-15 10:30:01.005] RESPONSE opCode=7 returnCode=1 params={0:OK}" }, lines);
@@ -58,7 +58,7 @@ public class AlbionEventLoggerTests
         var parser = new RaisablePhotonParser();
         _ = new AlbionEventLogger(parser, logPath, () => new DateTime(2026, 7, 15));
 
-        parser.RaiseEvent(new PhotonEvent(1, new Dictionary<byte, object>()));
+        parser.RaiseEvent(new PhotonEvent(1, new Dictionary<byte, object?>()));
 
         for (var i = 0; i < 20 && !File.Exists(logPath); i++)
         {
