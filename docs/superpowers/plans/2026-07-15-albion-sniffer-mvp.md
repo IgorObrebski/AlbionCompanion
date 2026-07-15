@@ -229,21 +229,29 @@ public class AppDbContextTests
     [Fact]
     public void PriceCache_EnforcesCompositeKeyUniqueness()
     {
+        // Two separate DbContext instances (sharing one open connection so the
+        // in-memory Sqlite database survives between them) simulate two independent
+        // save operations, so the second insert actually reaches the database instead
+        // of being rejected by the first context's local change tracker (which throws
+        // InvalidOperationException on Add(), not DbUpdateException on SaveChanges()).
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
-        using var context = CreateInMemoryContext(connection);
 
-        context.PriceCaches.Add(new PriceCache
+        using (var firstContext = CreateInMemoryContext(connection))
         {
-            ItemId = "T4_ORE",
-            Location = "Lymhurst",
-            SellPriceMin = 100,
-            BuyPriceMax = 90,
-            LastUpdated = DateTime.UtcNow
-        });
-        context.SaveChanges();
+            firstContext.PriceCaches.Add(new PriceCache
+            {
+                ItemId = "T4_ORE",
+                Location = "Lymhurst",
+                SellPriceMin = 100,
+                BuyPriceMax = 90,
+                LastUpdated = DateTime.UtcNow
+            });
+            firstContext.SaveChanges();
+        }
 
-        context.PriceCaches.Add(new PriceCache
+        using var secondContext = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);
+        secondContext.PriceCaches.Add(new PriceCache
         {
             ItemId = "T4_ORE",
             Location = "Lymhurst",
@@ -252,7 +260,7 @@ public class AppDbContextTests
             LastUpdated = DateTime.UtcNow
         });
 
-        Assert.Throws<DbUpdateException>(() => context.SaveChanges());
+        Assert.Throws<DbUpdateException>(() => secondContext.SaveChanges());
     }
 
     [Fact]
