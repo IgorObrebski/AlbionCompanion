@@ -10,6 +10,7 @@ public class AlbionEventLoggerTests
     {
         public event EventHandler<PhotonEvent>? OnEventReceived;
         public event EventHandler<PhotonResponse>? OnResponseReceived;
+        public event EventHandler<PhotonRequest>? OnRequestReceived;
         public void HandlePayload(byte[] payload) { }
     }
 
@@ -43,10 +44,26 @@ public class AlbionEventLoggerTests
         File.Delete(logPath);
     }
 
+    [Fact]
+    public async Task WriteRequestAsync_AppendsFormattedLine()
+    {
+        var logPath = Path.Combine(Path.GetTempPath(), $"albion-test-{Guid.NewGuid()}.log");
+        var fixedTime = new DateTime(2026, 7, 15, 10, 30, 2, 10);
+        var logger = new AlbionEventLogger(new FakePhotonParser(), logPath, () => fixedTime);
+
+        await logger.WriteRequestAsync(new PhotonRequest(9, new Dictionary<byte, object?> { [0] = "OK" }));
+
+        var lines = await File.ReadAllLinesAsync(logPath);
+        Assert.Equal(new[] { "[2026-07-15 10:30:02.010] REQUEST opCode=9 params={0:OK}" }, lines);
+
+        File.Delete(logPath);
+    }
+
     private sealed class RaisablePhotonParser : IPhotonParser
     {
         public event EventHandler<PhotonEvent>? OnEventReceived;
         public event EventHandler<PhotonResponse>? OnResponseReceived;
+        public event EventHandler<PhotonRequest>? OnRequestReceived;
         public void HandlePayload(byte[] payload) { }
         public void RaiseEvent(PhotonEvent photonEvent) => OnEventReceived?.Invoke(this, photonEvent);
     }

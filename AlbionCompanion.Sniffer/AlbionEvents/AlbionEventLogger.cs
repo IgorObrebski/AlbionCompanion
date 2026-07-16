@@ -13,6 +13,7 @@ public class AlbionEventLogger
         _nowProvider = nowProvider ?? (() => DateTime.Now);
         photonParser.OnEventReceived += (_, e) => _ = WriteEventAsync(e);
         photonParser.OnResponseReceived += (_, r) => _ = WriteResponseAsync(r);
+        photonParser.OnRequestReceived += (_, r) => _ = WriteRequestAsync(r);
     }
 
     internal Task WriteEventAsync(PhotonEvent photonEvent) =>
@@ -20,6 +21,9 @@ public class AlbionEventLogger
 
     internal Task WriteResponseAsync(PhotonResponse photonResponse) =>
         WriteLineAsync($"[{Timestamp()}] RESPONSE opCode={photonResponse.OperationCode} returnCode={photonResponse.ReturnCode} params={FormatParams(photonResponse.Parameters)}");
+
+    internal Task WriteRequestAsync(PhotonRequest photonRequest) =>
+        WriteLineAsync($"[{Timestamp()}] REQUEST opCode={photonRequest.OperationCode} params={FormatParams(photonRequest.Parameters)}");
 
     private string Timestamp() => _nowProvider().ToString("yyyy-MM-dd HH:mm:ss.fff");
 

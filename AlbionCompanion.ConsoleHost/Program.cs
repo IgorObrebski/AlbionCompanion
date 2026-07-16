@@ -3,19 +3,75 @@ using AlbionCompanion.Sniffer.Npcap;
 using AlbionCompanion.Sniffer.PacketCapture;
 using AlbionCompanion.Sniffer.Protocol16;
 using Microsoft.Extensions.DependencyInjection;
+using PacketDotNet;
+using SharpPcap;
+
+// TEMPORARY DIAGNOSTIC: set ALBION_DEBUG_PORTS=1 to capture all UDP traffic (no port filter)
+// and log every (sourcePort -> destinationPort) pair with a running packet count and timestamp
+// of last activity, to see which port lights up specifically during a gathering action if
+// 5055/5056 turn out to only carry movement traffic. Remove once ports are confirmed.
+if (Environment.GetEnvironmentVariable("ALBION_DEBUG_PORTS") == "1")
+{
+    var debugLogPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AlbionCompanion", "debug_ports.log");
+    Directory.CreateDirectory(Path.GetDirectoryName(debugLogPath)!);
+    Console.WriteLine("DEBUG MODE: capturing ALL UDP traffic (no port filter). Press ENTER to stop.");
+    Console.WriteLine($"Writing port activity to: {debugLogPath}");
+    var packetCounts = new Dictionary<(ushort Source, ushort Destination), int>();
+    var debugDevices = new List<ILiveDevice>();
+
+    foreach (var device in CaptureDeviceList.Instance)
+    {
+        device.OnPacketArrival += (_, e) =>
+        {
+            var udpPacket = e.GetPacket().GetPacket().Extract<UdpPacket>();
+            if (udpPacket is null)
+            {
+                return;
+            }
+
+            (ushort Source, ushort Destination) key = (udpPacket.SourcePort, udpPacket.DestinationPort);
+            packetCounts[key] = packetCounts.GetValueOrDefault(key) + 1;
+            var count = packetCounts[key];
+            if (count == 1 || count % 100 == 0)
+            {
+                var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] UDP {key.Source} -> {key.Destination} ({udpPacket.PayloadData.Length} bytes) count={count} on {device.Name}";
+                Console.WriteLine(line);
+                _ = File.AppendAllTextAsync(debugLogPath, line + Environment.NewLine);
+            }
+        };
+        device.Open(new DeviceConfiguration { Mode = DeviceModes.Promiscuous, ReadTimeout = 1000 });
+        device.Filter = "udp";
+        device.StartCapture();
+        debugDevices.Add(device);
+    }
+
+    Console.ReadLine();
+
+    foreach (var device in debugDevices)
+    {
+        device.StopCapture();
+        device.Close();
+    }
+
+    return;
+}
 
 var services = new ServiceCollection();
 
 var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AlbionCompanion");
 Directory.CreateDirectory(appDataPath);
 var logPath = Path.Combine(appDataPath, "debug_packets.log");
+var eventNamesLogPath = Path.Combine(appDataPath, "debug_event_names.log");
+var parseFailuresLogPath = Path.Combine(appDataPath, "debug_parse_failures.log");
 
 services.AddSingleton<HttpClient>();
 services.AddSingleton<INpcapChecker, NpcapRegistryChecker>();
 services.AddSingleton<NpcapInstaller>();
 services.AddSingleton<IPacketSniffer, PacketSniffer>();
-services.AddSingleton<IPhotonParser, AlbionPhotonParser>();
+services.AddSingleton<AlbionPhotonParser>();
+services.AddSingleton<IPhotonParser>(sp => sp.GetRequiredService<AlbionPhotonParser>());
 services.AddSingleton(sp => new AlbionEventLogger(sp.GetRequiredService<IPhotonParser>(), logPath));
+services.AddSingleton(sp => new AlbionEventNameLogger(sp.GetRequiredService<IPhotonParser>(), eventNamesLogPath));
 
 await using var provider = services.BuildServiceProvider();
 
@@ -25,8 +81,12 @@ await npcapInstaller.EnsureInstalledAsync();
 
 // Force construction so its constructor subscribes to the parser's events before capture starts.
 _ = provider.GetRequiredService<AlbionEventLogger>();
+_ = provider.GetRequiredService<AlbionEventNameLogger>();
 
-var photonParser = provider.GetRequiredService<IPhotonParser>();
+var photonParser = provider.GetRequiredService<AlbionPhotonParser>();
+photonParser.OnParseFailure += (_, ex) =>
+    _ = File.AppendAllTextAsync(parseFailuresLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {ex.GetType().Name}: {ex.Message}{Environment.NewLine}");
+
 var sniffer = provider.GetRequiredService<IPacketSniffer>();
 sniffer.OnPhotonPayloadReceived += (_, payload) => photonParser.HandlePayload(payload);
 
@@ -37,6 +97,7 @@ foreach (var device in SharpPcap.CaptureDeviceList.Instance)
 }
 
 Console.WriteLine($"AlbionCompanion Sniffer (debug logging mode). Writing to: {logPath}");
+Console.WriteLine($"Recognized event names logged to: {eventNamesLogPath}");
 Console.WriteLine("Start Albion Online and go gathering. Press ENTER here to stop.");
 sniffer.Start();
 

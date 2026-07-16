@@ -5,7 +5,7 @@ namespace AlbionCompanion.Sniffer.PacketCapture;
 
 public class PacketSniffer : IPacketSniffer
 {
-    private const string CaptureFilter = "udp and (port 5055 or port 5056)";
+    private const string CaptureFilter = "udp and (port 5055 or port 5056 or port 4535)";
 
     private readonly List<ILiveDevice> _devices = new();
 
