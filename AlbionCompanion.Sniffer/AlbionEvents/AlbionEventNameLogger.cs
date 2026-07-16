@@ -24,9 +24,24 @@ public class AlbionEventNameLogger
 
     internal Task WriteEventAsync(PhotonEvent photonEvent)
     {
-        var rawCode = photonEvent.Parameters.TryGetValue(SemanticEventCodeParameterKey, out var semanticCode) && semanticCode is not null
-            ? Convert.ToByte(semanticCode)
-            : photonEvent.Code;
+        byte rawCode;
+        if (photonEvent.Parameters.TryGetValue(SemanticEventCodeParameterKey, out var semanticCode) && semanticCode is not null)
+        {
+            // Confirmed via live capture: Convert.ToByte throws OverflowException when this
+            // parameter decodes to a value outside 0-255 (it isn't always a small "code" byte -
+            // depends on which Photon type encoded it on the wire). A value that large can't be
+            // one of our mapped AlbionEventCode values anyway, so just skip the line instead of
+            // throwing - a throw here propagates out of the live Photon parse loop and aborts
+            // every other command bundled in the same UDP packet (see AlbionPhotonParser).
+            if (!TryToByte(semanticCode, out rawCode))
+            {
+                return Task.CompletedTask;
+            }
+        }
+        else
+        {
+            rawCode = photonEvent.Code;
+        }
 
         if (!AlbionEventCodeMapper.TryMap(rawCode, out var mapped))
         {
@@ -34,6 +49,19 @@ public class AlbionEventNameLogger
         }
 
         return WriteLineAsync($"[{Timestamp()}] {mapped} code={rawCode}");
+    }
+
+    private static bool TryToByte(object value, out byte result)
+    {
+        var numeric = Convert.ToInt64(value);
+        if (numeric is >= byte.MinValue and <= byte.MaxValue)
+        {
+            result = (byte)numeric;
+            return true;
+        }
+
+        result = 0;
+        return false;
     }
 
     private string Timestamp() => _nowProvider().ToString("yyyy-MM-dd HH:mm:ss.fff");

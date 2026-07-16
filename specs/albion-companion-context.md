@@ -228,12 +228,24 @@ wyciąga z nich prawdziwej nazwy.
 
 ---
 
-## SŁOWNIK PRZEDMIOTÓW – źródło danych
+## SŁOWNIK PRZEDMIOTÓW – źródło danych - ZAIMPLEMENTOWANE 2026-07-16
 
 - **Repo:** `https://github.com/ao-data/ao-bin-dumps`
-- **Plik:** `items.json` (raw URL: `https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/items.json`)
-- **Kiedy:** Pobieramy i importujemy do SQLite przy **pierwszym uruchomieniu** (lub gdy tabela `ItemDictionary` jest pusta)
-- **Format JSON:** Tablica obiektów z polami `UniqueName`, `LocalizedNames` (słownik języków), `Tier`, `ShopCategory`
+- **Plik:** `formatted/items.json` (raw URL:
+  `https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/items.json`) - **uwaga:**
+  ścieżka to `formatted/items.json`, nie gołe `items.json` jak pierwotnie zakładano w tym dokumencie.
+- **Kiedy:** Pobieramy i importujemy do SQLite przy **pierwszym uruchomieniu** (gdy tabela
+  `ItemDictionary` jest pusta) - `ItemDictionaryService.SeedFromJsonAsync()`.
+- **Realny format JSON** (sprawdzony bezpośrednio, ~12k wpisów): tablica obiektów z polami
+  `UniqueName`, `LocalizedNames` (słownik kodów językowych np. `PL-PL`, `EN-US`). **Nie ma** pól
+  `Tier`/`ShopCategory` wprost, wbrew wcześniejszemu założeniu w tym dokumencie - `Tier` i
+  `ItemGroup` są wyprowadzane z konwencji nazewnictwa `UniqueName` (np. `T4_ORE` → tier=4,
+  group="ORE"); przedmioty bez tego prefiksu (większość ekwipunku, np. `MAIN_SWORD`) dostają
+  tier=0 i group=cały `UniqueName`.
+- Kod: `AlbionCompanion.Gathering/{IItemDictionaryService.cs, ItemDictionaryService.cs}`. Zbudowane
+  razem z naprawą korelacji tier+kategoria w `GatheringEventRouter` (patrz `HarvestableCategory.cs`,
+  `HarvestableNodeTracker.cs`) - to była realna przyczyna błędu, w którym różne tiery tej samej
+  kategorii surowca (Żelazo/Cyna/Tytan = wszystko "Ruda") wyglądały jak jeden typ.
 
 ---
 

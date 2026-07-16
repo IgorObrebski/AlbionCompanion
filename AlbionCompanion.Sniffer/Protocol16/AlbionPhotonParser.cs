@@ -27,11 +27,28 @@ public class AlbionPhotonParser : PhotonParser, IPhotonParser
     }
 
     protected override void OnEvent(byte code, Dictionary<byte, object?> parameters) =>
-        OnEventReceived?.Invoke(this, new PhotonEvent(code, parameters));
+        RaiseIsolated(() => OnEventReceived?.Invoke(this, new PhotonEvent(code, parameters)));
 
     protected override void OnRequest(byte operationCode, Dictionary<byte, object?> parameters) =>
-        OnRequestReceived?.Invoke(this, new PhotonRequest(operationCode, parameters));
+        RaiseIsolated(() => OnRequestReceived?.Invoke(this, new PhotonRequest(operationCode, parameters)));
 
     protected override void OnResponse(byte operationCode, short returnCode, string debugMessage, Dictionary<byte, object?> parameters) =>
-        OnResponseReceived?.Invoke(this, new PhotonResponse(operationCode, returnCode, debugMessage, parameters));
+        RaiseIsolated(() => OnResponseReceived?.Invoke(this, new PhotonResponse(operationCode, returnCode, debugMessage, parameters)));
+
+    // These overrides run synchronously inside PhotonParser.ReceivePacket's per-command loop
+    // (see HandlePayload's NOTE). A subscriber that throws here - confirmed via live capture:
+    // Convert.ToByte overflowing on an unexpectedly large parameter value - would otherwise
+    // propagate out of ReceivePacket and abort every remaining command in the same UDP datagram,
+    // silently dropping unrelated data that had nothing to do with the failing subscriber.
+    private void RaiseIsolated(Action raiseEvent)
+    {
+        try
+        {
+            raiseEvent();
+        }
+        catch (Exception ex)
+        {
+            OnParseFailure?.Invoke(this, ex);
+        }
+    }
 }

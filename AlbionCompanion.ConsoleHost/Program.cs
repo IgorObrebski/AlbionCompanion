@@ -78,7 +78,10 @@ services.AddSingleton(sp => new AlbionEventLogger(sp.GetRequiredService<IPhotonP
 services.AddSingleton(sp => new AlbionEventNameLogger(sp.GetRequiredService<IPhotonParser>(), eventNamesLogPath));
 services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 services.AddSingleton<IZoneCatalog, ZoneCatalog>();
+services.AddSingleton<ILocalPlayerTracker, LocalPlayerTracker>();
+services.AddSingleton<IHarvestableNodeTracker, HarvestableNodeTracker>();
 services.AddScoped<IGatheringSessionService, GatheringSessionService>();
+services.AddScoped<IItemDictionaryService, ItemDictionaryService>();
 services.AddScoped<ZoneTracker>();
 services.AddScoped<GatheringEventRouter>();
 
@@ -87,6 +90,8 @@ await using var provider = services.BuildServiceProvider();
 using (var migrationScope = provider.CreateScope())
 {
     await migrationScope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    Console.WriteLine("Checking item dictionary...");
+    await migrationScope.ServiceProvider.GetRequiredService<IItemDictionaryService>().SeedFromJsonAsync();
 }
 
 var npcapInstaller = provider.GetRequiredService<NpcapInstaller>();
@@ -98,6 +103,8 @@ await npcapInstaller.EnsureInstalledAsync();
 // so its scope must stay alive for the process lifetime - not disposed until the app exits.
 _ = provider.GetRequiredService<AlbionEventLogger>();
 _ = provider.GetRequiredService<AlbionEventNameLogger>();
+_ = provider.GetRequiredService<ILocalPlayerTracker>();
+_ = provider.GetRequiredService<IHarvestableNodeTracker>();
 var sessionScope = provider.CreateScope();
 _ = sessionScope.ServiceProvider.GetRequiredService<ZoneTracker>();
 _ = sessionScope.ServiceProvider.GetRequiredService<GatheringEventRouter>();
