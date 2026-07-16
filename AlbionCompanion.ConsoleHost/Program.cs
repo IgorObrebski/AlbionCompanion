@@ -1,7 +1,10 @@
+using AlbionCompanion.Core.Data;
+using AlbionCompanion.Gathering;
 using AlbionCompanion.Sniffer.AlbionEvents;
 using AlbionCompanion.Sniffer.Npcap;
 using AlbionCompanion.Sniffer.PacketCapture;
 using AlbionCompanion.Sniffer.Protocol16;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PacketDotNet;
 using SharpPcap;
@@ -63,6 +66,7 @@ Directory.CreateDirectory(appDataPath);
 var logPath = Path.Combine(appDataPath, "debug_packets.log");
 var eventNamesLogPath = Path.Combine(appDataPath, "debug_event_names.log");
 var parseFailuresLogPath = Path.Combine(appDataPath, "debug_parse_failures.log");
+var dbPath = Path.Combine(appDataPath, "albion.db");
 
 services.AddSingleton<HttpClient>();
 services.AddSingleton<INpcapChecker, NpcapRegistryChecker>();
@@ -72,16 +76,31 @@ services.AddSingleton<AlbionPhotonParser>();
 services.AddSingleton<IPhotonParser>(sp => sp.GetRequiredService<AlbionPhotonParser>());
 services.AddSingleton(sp => new AlbionEventLogger(sp.GetRequiredService<IPhotonParser>(), logPath));
 services.AddSingleton(sp => new AlbionEventNameLogger(sp.GetRequiredService<IPhotonParser>(), eventNamesLogPath));
+services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+services.AddSingleton<IZoneCatalog, ZoneCatalog>();
+services.AddScoped<IGatheringSessionService, GatheringSessionService>();
+services.AddScoped<ZoneTracker>();
+services.AddScoped<GatheringEventRouter>();
 
 await using var provider = services.BuildServiceProvider();
+
+using (var migrationScope = provider.CreateScope())
+{
+    await migrationScope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+}
 
 var npcapInstaller = provider.GetRequiredService<NpcapInstaller>();
 Console.WriteLine("Checking Npcap installation...");
 await npcapInstaller.EnsureInstalledAsync();
 
 // Force construction so its constructor subscribes to the parser's events before capture starts.
+// ZoneTracker is scoped (it holds a scoped AppDbContext transitively via GatheringSessionService),
+// so its scope must stay alive for the process lifetime - not disposed until the app exits.
 _ = provider.GetRequiredService<AlbionEventLogger>();
 _ = provider.GetRequiredService<AlbionEventNameLogger>();
+var sessionScope = provider.CreateScope();
+_ = sessionScope.ServiceProvider.GetRequiredService<ZoneTracker>();
+_ = sessionScope.ServiceProvider.GetRequiredService<GatheringEventRouter>();
 
 var photonParser = provider.GetRequiredService<AlbionPhotonParser>();
 photonParser.OnParseFailure += (_, ex) =>
@@ -104,4 +123,5 @@ sniffer.Start();
 Console.ReadLine();
 
 sniffer.Stop();
+sessionScope.Dispose();
 Console.WriteLine("Stopped.");

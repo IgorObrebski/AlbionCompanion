@@ -2,6 +2,8 @@
   <Project Path="AlbionCompanion.ConsoleHost/AlbionCompanion.ConsoleHost.csproj" />
   <Project Path="AlbionCompanion.Core.Tests/AlbionCompanion.Core.Tests.csproj" />
   <Project Path="AlbionCompanion.Core/AlbionCompanion.Core.csproj" />
+  <Project Path="AlbionCompanion.Gathering.Tests/AlbionCompanion.Gathering.Tests.csproj" />
+  <Project Path="AlbionCompanion.Gathering/AlbionCompanion.Gathering.csproj" />
   <Project Path="AlbionCompanion.Sniffer.Tests/AlbionCompanion.Sniffer.Tests.csproj" />
   <Project Path="AlbionCompanion.Sniffer/AlbionCompanion.Sniffer.csproj" />
 </Solution>

@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Text;
 using AlbionCompanion.Sniffer.Protocol16;
 
 namespace AlbionCompanion.Sniffer.AlbionEvents;
@@ -28,7 +30,25 @@ public class AlbionEventLogger
     private string Timestamp() => _nowProvider().ToString("yyyy-MM-dd HH:mm:ss.fff");
 
     private static string FormatParams(Dictionary<byte, object?> parameters) =>
-        "{" + string.Join(", ", parameters.Select(kv => $"{kv.Key}:{kv.Value}")) + "}";
+        "{" + string.Join(", ", parameters.Select(kv => $"{kv.Key}:{FormatValue(kv.Value)}")) + "}";
+
+    // Arrays/byte[] print as e.g. "System.String[]" via ToString() by default, which hides
+    // exactly the data most useful for reverse-engineering event codes (zone names, item lists).
+    private static string FormatValue(object? value)
+    {
+        if (value is byte[] bytes)
+        {
+            return Convert.ToHexString(bytes);
+        }
+
+        if (value is IEnumerable enumerable and not string)
+        {
+            var items = enumerable.Cast<object?>().Select(FormatValue);
+            return "[" + string.Join(", ", items) + "]";
+        }
+
+        return value?.ToString() ?? "null";
+    }
 
     private async Task WriteLineAsync(string line)
     {

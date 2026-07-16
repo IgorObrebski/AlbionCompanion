@@ -205,6 +205,27 @@ Gracz uruchamia aplikację, idzie zbierać surowce, wraca – analizujemy log i 
 - **Puste przebiegi:** Jeśli sesja kończy się z zerową liczbą zebranych przedmiotów → usuń ją z bazy
 - **Gwarancja:** Zawsze max jedna sesja z `EndTime = null` w bazie
 
+### Dekodowanie lokacji (nazw stref) - ROZWIĄZANE 2026-07-16
+
+Zone id (`RESPONSE` z `params[253]==2`, identyfikator w `params[8]`) mapujemy teraz na nazwę i typ
+strefy przez `ZoneCatalog` (`AlbionCompanion.Gathering/ZoneCatalog.cs`), które pobiera
+`zones.json` z `ao-data/ao-bin-dumps` (mirror: Nouuu/Albion-Online-OpenRadar). Ten sam plik,
+którego użyjemy do słownika przedmiotów, zawiera też pełną mapę zoneId→{name, type}.
+
+To rozwiązało też realny bug: bank i market w mieście mają **własne, odrębne zoneId** (np.
+Fort Sterling=4000, Bank=4001, Market=4002 - wszystkie `PLAYERCITY_SAFEAREA_*`), więc naiwne
+"wróciłem do strefy startowej" fałszywie traktowało wizytę w banku jako wyprawę na zbieractwo.
+`ZoneTracker` teraz klasyfikuje **każdą** strefę (miasto/safe-area vs otwarty świat) przez
+`IZoneCatalog.IsCityOrSafeAreaAsync`, zamiast pamiętać jedną "strefę domową" - wejście do
+dowolnej safe-area (miasto, bank, market) kończy aktywną sesję (no-op jeśli jej nie było),
+wejście do prawdziwej dziczy/dungeonu ją zaczyna, z `StartLocation` = prawdziwa nazwa strefy
+(np. "Cairn Camain") zamiast gołego ID.
+
+Nadal do zrobienia: dynamiczne instancje (dungeony, hideouty, Mists) używają w praktyce
+suchowanego ID (`"1234-5"`) albo syntetycznych kluczy nienumerycznych (`@MISTS@<guid>`) - obecna
+implementacja traktuje nierozpoznane zoneId jako "otwarty świat" (bezpieczny fallback), ale nie
+wyciąga z nich prawdziwej nazwy.
+
 ---
 
 ## SŁOWNIK PRZEDMIOTÓW – źródło danych
