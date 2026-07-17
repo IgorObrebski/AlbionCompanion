@@ -1,10 +1,5 @@
-using AlbionCompanion.Core.Data;
 using AlbionCompanion.Gathering;
-using AlbionCompanion.Sniffer.AlbionEvents;
-using AlbionCompanion.Sniffer.Npcap;
 using AlbionCompanion.Sniffer.PacketCapture;
-using AlbionCompanion.Sniffer.Protocol16;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PacketDotNet;
 using SharpPcap;
@@ -59,75 +54,15 @@ if (Environment.GetEnvironmentVariable("ALBION_DEBUG_PORTS") == "1")
     return;
 }
 
-var services = new ServiceCollection();
-
 var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AlbionCompanion");
 Directory.CreateDirectory(appDataPath);
-var logPath = Path.Combine(appDataPath, "debug_packets.log");
-var eventNamesLogPath = Path.Combine(appDataPath, "debug_event_names.log");
-var parseFailuresLogPath = Path.Combine(appDataPath, "debug_parse_failures.log");
-var rawEventRecordFailuresLogPath = Path.Combine(appDataPath, "debug_raw_event_record_failures.log");
-var dbPath = Path.Combine(appDataPath, "albion.db");
 
-services.AddSingleton<HttpClient>();
-services.AddSingleton<INpcapChecker, NpcapRegistryChecker>();
-services.AddSingleton<NpcapInstaller>();
-services.AddSingleton<IPacketSniffer, PacketSniffer>();
-services.AddSingleton<AlbionPhotonParser>();
-services.AddSingleton<IPhotonParser>(sp => sp.GetRequiredService<AlbionPhotonParser>());
-services.AddSingleton(sp => new AlbionEventLogger(sp.GetRequiredService<IPhotonParser>(), logPath));
-services.AddSingleton(sp => new AlbionEventNameLogger(sp.GetRequiredService<IPhotonParser>(), eventNamesLogPath));
-services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
-services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
-services.AddSingleton<IZoneCatalog, ZoneCatalog>();
-services.AddSingleton<ILocalPlayerTracker, LocalPlayerTracker>();
-services.AddSingleton<IHarvestableNodeTracker, HarvestableNodeTracker>();
-services.AddScoped<IGatheringSessionService, GatheringSessionService>();
-services.AddScoped<IItemDictionaryService, ItemDictionaryService>();
-services.AddScoped<ZoneTracker>();
-services.AddScoped<GatheringEventRouter>();
-services.AddScoped<IRawEventRecorder, RawEventRecorder>();
-
-await using var provider = services.BuildServiceProvider();
-
-using (var migrationScope = provider.CreateScope())
-{
-    var dbContext = migrationScope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await dbContext.Database.MigrateAsync();
-    Console.WriteLine("Checking item dictionary...");
-    await migrationScope.ServiceProvider.GetRequiredService<IItemDictionaryService>().SeedFromJsonAsync();
-
-    Console.WriteLine("Cleaning up old raw gathering events...");
-    var rawEventCutoff = DateTime.UtcNow - RawGatheringEventRetention.Period;
-    await dbContext.RawGatheringEvents
-        .Where(e => e.Timestamp < rawEventCutoff)
-        .ExecuteDeleteAsync();
-}
-
-var npcapInstaller = provider.GetRequiredService<NpcapInstaller>();
+Console.WriteLine("Checking item dictionary...");
+Console.WriteLine("Cleaning up old raw gathering events...");
 Console.WriteLine("Checking Npcap installation...");
-await npcapInstaller.EnsureInstalledAsync();
 
-// Force construction so its constructor subscribes to the parser's events before capture starts.
-// ZoneTracker is scoped (it holds a scoped AppDbContext transitively via GatheringSessionService),
-// so its scope must stay alive for the process lifetime - not disposed until the app exits.
-_ = provider.GetRequiredService<AlbionEventLogger>();
-_ = provider.GetRequiredService<AlbionEventNameLogger>();
-_ = provider.GetRequiredService<ILocalPlayerTracker>();
-_ = provider.GetRequiredService<IHarvestableNodeTracker>();
-var sessionScope = provider.CreateScope();
-_ = sessionScope.ServiceProvider.GetRequiredService<ZoneTracker>();
-_ = sessionScope.ServiceProvider.GetRequiredService<GatheringEventRouter>();
-var rawEventRecorder = (RawEventRecorder)sessionScope.ServiceProvider.GetRequiredService<IRawEventRecorder>();
-rawEventRecorder.OnRecordFailure += (_, ex) =>
-    _ = File.AppendAllTextAsync(rawEventRecordFailuresLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {ex.GetType().Name}: {ex.Message}{Environment.NewLine}");
-
-var photonParser = provider.GetRequiredService<AlbionPhotonParser>();
-photonParser.OnParseFailure += (_, ex) =>
-    _ = File.AppendAllTextAsync(parseFailuresLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {ex.GetType().Name}: {ex.Message}{Environment.NewLine}");
-
-var sniffer = provider.GetRequiredService<IPacketSniffer>();
-sniffer.OnPhotonPayloadReceived += (_, payload) => photonParser.HandlePayload(payload);
+await using var provider = AppHostBuilder.BuildServiceProvider(appDataPath);
+var sessionScope = await AppHostBuilder.RunStartupSequenceAsync(provider);
 
 Console.WriteLine("Network devices Npcap can see:");
 foreach (var device in SharpPcap.CaptureDeviceList.Instance)
@@ -135,13 +70,15 @@ foreach (var device in SharpPcap.CaptureDeviceList.Instance)
     Console.WriteLine($"  - {device.Name} ({device.Description})");
 }
 
+var logPath = Path.Combine(appDataPath, "debug_packets.log");
+var eventNamesLogPath = Path.Combine(appDataPath, "debug_event_names.log");
 Console.WriteLine($"AlbionCompanion Sniffer (debug logging mode). Writing to: {logPath}");
 Console.WriteLine($"Recognized event names logged to: {eventNamesLogPath}");
 Console.WriteLine("Start Albion Online and go gathering. Press ENTER here to stop.");
-sniffer.Start();
 
 Console.ReadLine();
 
+var sniffer = provider.GetRequiredService<IPacketSniffer>();
 sniffer.Stop();
 sessionScope.Dispose();
 Console.WriteLine("Stopped.");
