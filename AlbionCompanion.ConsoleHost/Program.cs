@@ -84,6 +84,7 @@ services.AddScoped<IGatheringSessionService, GatheringSessionService>();
 services.AddScoped<IItemDictionaryService, ItemDictionaryService>();
 services.AddScoped<ZoneTracker>();
 services.AddScoped<GatheringEventRouter>();
+services.AddScoped<IRawEventRecorder, RawEventRecorder>();
 
 await using var provider = services.BuildServiceProvider();
 
@@ -108,6 +109,7 @@ _ = provider.GetRequiredService<IHarvestableNodeTracker>();
 var sessionScope = provider.CreateScope();
 _ = sessionScope.ServiceProvider.GetRequiredService<ZoneTracker>();
 _ = sessionScope.ServiceProvider.GetRequiredService<GatheringEventRouter>();
+_ = sessionScope.ServiceProvider.GetRequiredService<IRawEventRecorder>();
 
 var photonParser = provider.GetRequiredService<AlbionPhotonParser>();
 photonParser.OnParseFailure += (_, ex) =>
