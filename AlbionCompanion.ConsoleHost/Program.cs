@@ -92,9 +92,15 @@ await using var provider = services.BuildServiceProvider();
 
 using (var migrationScope = provider.CreateScope())
 {
-    await migrationScope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    var dbContext = migrationScope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await dbContext.Database.MigrateAsync();
     Console.WriteLine("Checking item dictionary...");
     await migrationScope.ServiceProvider.GetRequiredService<IItemDictionaryService>().SeedFromJsonAsync();
+
+    var rawEventCutoff = DateTime.UtcNow - RawGatheringEventRetention.Period;
+    await dbContext.RawGatheringEvents
+        .Where(e => e.Timestamp < rawEventCutoff)
+        .ExecuteDeleteAsync();
 }
 
 var npcapInstaller = provider.GetRequiredService<NpcapInstaller>();
