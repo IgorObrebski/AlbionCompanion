@@ -97,6 +97,7 @@ using (var migrationScope = provider.CreateScope())
     Console.WriteLine("Checking item dictionary...");
     await migrationScope.ServiceProvider.GetRequiredService<IItemDictionaryService>().SeedFromJsonAsync();
 
+    Console.WriteLine("Cleaning up old raw gathering events...");
     var rawEventCutoff = DateTime.UtcNow - RawGatheringEventRetention.Period;
     await dbContext.RawGatheringEvents
         .Where(e => e.Timestamp < rawEventCutoff)
