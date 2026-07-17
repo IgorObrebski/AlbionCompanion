@@ -66,6 +66,7 @@ Directory.CreateDirectory(appDataPath);
 var logPath = Path.Combine(appDataPath, "debug_packets.log");
 var eventNamesLogPath = Path.Combine(appDataPath, "debug_event_names.log");
 var parseFailuresLogPath = Path.Combine(appDataPath, "debug_parse_failures.log");
+var rawEventRecordFailuresLogPath = Path.Combine(appDataPath, "debug_raw_event_record_failures.log");
 var dbPath = Path.Combine(appDataPath, "albion.db");
 
 services.AddSingleton<HttpClient>();
@@ -77,6 +78,7 @@ services.AddSingleton<IPhotonParser>(sp => sp.GetRequiredService<AlbionPhotonPar
 services.AddSingleton(sp => new AlbionEventLogger(sp.GetRequiredService<IPhotonParser>(), logPath));
 services.AddSingleton(sp => new AlbionEventNameLogger(sp.GetRequiredService<IPhotonParser>(), eventNamesLogPath));
 services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
+services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
 services.AddSingleton<IZoneCatalog, ZoneCatalog>();
 services.AddSingleton<ILocalPlayerTracker, LocalPlayerTracker>();
 services.AddSingleton<IHarvestableNodeTracker, HarvestableNodeTracker>();
@@ -109,7 +111,9 @@ _ = provider.GetRequiredService<IHarvestableNodeTracker>();
 var sessionScope = provider.CreateScope();
 _ = sessionScope.ServiceProvider.GetRequiredService<ZoneTracker>();
 _ = sessionScope.ServiceProvider.GetRequiredService<GatheringEventRouter>();
-_ = sessionScope.ServiceProvider.GetRequiredService<IRawEventRecorder>();
+var rawEventRecorder = (RawEventRecorder)sessionScope.ServiceProvider.GetRequiredService<IRawEventRecorder>();
+rawEventRecorder.OnRecordFailure += (_, ex) =>
+    _ = File.AppendAllTextAsync(rawEventRecordFailuresLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {ex.GetType().Name}: {ex.Message}{Environment.NewLine}");
 
 var photonParser = provider.GetRequiredService<AlbionPhotonParser>();
 photonParser.OnParseFailure += (_, ex) =>
