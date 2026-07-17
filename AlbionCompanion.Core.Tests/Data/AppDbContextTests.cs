@@ -73,4 +73,52 @@ public class AppDbContextTests
 
         Assert.Single(context.GatheringSessions);
     }
+
+    [Fact]
+    public void RawGatheringEvents_PersistRoundTrip_WithNullableSessionId()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+
+        context.RawGatheringEvents.Add(new RawGatheringEvent
+        {
+            SessionId = null,
+            PhotonCode = 1,
+            SemanticEventCode = 59,
+            ParametersJson = "{\"0\":535802,\"3\":2955,\"4\":27,\"252\":59}",
+            Timestamp = DateTime.UtcNow
+        });
+        context.SaveChanges();
+
+        var stored = Assert.Single(context.RawGatheringEvents);
+        Assert.Null(stored.SessionId);
+        Assert.Equal((byte)59, stored.SemanticEventCode);
+    }
+
+    [Fact]
+    public void RawGatheringEvents_PersistWithSessionId()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+
+        var session = new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "Lymhurst" };
+        context.GatheringSessions.Add(session);
+        context.SaveChanges();
+
+        context.RawGatheringEvents.Add(new RawGatheringEvent
+        {
+            SessionId = session.Id,
+            PhotonCode = 1,
+            SemanticEventCode = null,
+            ParametersJson = "{}",
+            Timestamp = DateTime.UtcNow
+        });
+        context.SaveChanges();
+
+        var stored = Assert.Single(context.RawGatheringEvents);
+        Assert.Equal(session.Id, stored.SessionId);
+        Assert.Null(stored.SemanticEventCode);
+    }
 }

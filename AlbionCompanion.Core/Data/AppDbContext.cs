@@ -15,9 +15,20 @@ public class AppDbContext : DbContext
     public DbSet<FlipLog> FlipLogs => Set<FlipLog>();
     public DbSet<ItemDictionary> ItemDictionaries => Set<ItemDictionary>();
     public DbSet<PriceCache> PriceCaches => Set<PriceCache>();
+    public DbSet<RawGatheringEvent> RawGatheringEvents => Set<RawGatheringEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<PriceCache>().HasKey(priceCache => new { priceCache.ItemId, priceCache.Location });
+
+        modelBuilder.Entity<RawGatheringEvent>(entity =>
+        {
+            entity.HasIndex(e => e.SessionId);
+            entity.HasIndex(e => e.Timestamp);
+            entity.HasOne(e => e.Session)
+                .WithMany()
+                .HasForeignKey(e => e.SessionId)
+                .IsRequired(false);
+        });
     }
 }
