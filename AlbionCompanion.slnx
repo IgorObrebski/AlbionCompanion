@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="AlbionCompanion.App/AlbionCompanion.App.csproj" />
   <Project Path="AlbionCompanion.ConsoleHost/AlbionCompanion.ConsoleHost.csproj" />
   <Project Path="AlbionCompanion.Core.Tests/AlbionCompanion.Core.Tests.csproj" />
   <Project Path="AlbionCompanion.Core/AlbionCompanion.Core.csproj" />
