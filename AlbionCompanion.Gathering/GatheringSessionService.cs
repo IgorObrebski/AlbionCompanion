@@ -13,6 +13,11 @@ public class GatheringSessionService : IGatheringSessionService
         _dbContext = dbContext;
     }
 
+    public event EventHandler<GatheringSession>? OnSessionStarted;
+    public event EventHandler<GatheringSession>? OnSessionEnded;
+    public event EventHandler<GatheredItem>? OnItemAdded;
+    public event EventHandler<FameLog>? OnFameAdded;
+
     public async Task<GatheringSession?> GetActiveSessionAsync() =>
         await _dbContext.GatheringSessions.SingleOrDefaultAsync(session => session.EndTime == null);
 
@@ -26,13 +31,15 @@ public class GatheringSessionService : IGatheringSessionService
             return;
         }
 
-        _dbContext.GatheringSessions.Add(new GatheringSession
+        var session = new GatheringSession
         {
             StartTime = DateTime.UtcNow,
             StartLocation = location,
-        });
+        };
+        _dbContext.GatheringSessions.Add(session);
 
         await _dbContext.SaveChangesAsync();
+        OnSessionStarted?.Invoke(this, session);
     }
 
     public async Task EndSessionAsync()
@@ -53,13 +60,13 @@ public class GatheringSessionService : IGatheringSessionService
         if (!hasAnyActivity)
         {
             _dbContext.GatheringSessions.Remove(session);
-        }
-        else
-        {
-            session.EndTime = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync();
+            return;
         }
 
+        session.EndTime = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync();
+        OnSessionEnded?.Invoke(this, session);
     }
 
     public async Task AddItemAsync(string itemId, int amount)
@@ -71,15 +78,17 @@ public class GatheringSessionService : IGatheringSessionService
             return;
         }
 
-        _dbContext.GatheredItems.Add(new GatheredItem
+        var item = new GatheredItem
         {
             SessionId = session.Id,
             ItemId = itemId,
             Amount = amount,
             Timestamp = DateTime.UtcNow,
-        });
+        };
+        _dbContext.GatheredItems.Add(item);
 
         await _dbContext.SaveChangesAsync();
+        OnItemAdded?.Invoke(this, item);
     }
 
     public async Task AddFameAsync(string fameType, int amount)
@@ -90,15 +99,17 @@ public class GatheringSessionService : IGatheringSessionService
             return;
         }
 
-        _dbContext.FameLogs.Add(new FameLog
+        var fameLog = new FameLog
         {
             SessionId = session.Id,
             FameType = fameType,
             Amount = amount,
             Timestamp = DateTime.UtcNow,
-        });
+        };
+        _dbContext.FameLogs.Add(fameLog);
         session.TotalFameEarned += amount;
 
         await _dbContext.SaveChangesAsync();
+        OnFameAdded?.Invoke(this, fameLog);
     }
 }
