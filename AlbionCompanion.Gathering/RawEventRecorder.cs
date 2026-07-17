@@ -17,22 +17,21 @@ namespace AlbionCompanion.Gathering;
 // injected into GatheringSessionService/GatheringEventRouter - EF Core forbids concurrent
 // operations on a single DbContext instance, and without this isolation two events arriving
 // close together would throw "A second operation was started on this context instance before a
-// previous operation completed." The active-session lookup still goes through the injected
-// IGatheringSessionService (and therefore its own shared context) because that is a read against
-// a service not expected to be called concurrently with itself; only the write below needed to
-// move off the shared instance.
+// previous operation completed." The active-session lookup is done directly against this same
+// fresh per-event context (duplicating GatheringSessionService.GetActiveSessionAsync's query)
+// rather than going through IGatheringSessionService, which uses the shared scoped context that
+// GatheringEventRouter also reads/writes concurrently - routing the lookup through that service
+// would reintroduce the exact race this fresh-context isolation is meant to eliminate.
 public class RawEventRecorder : IRawEventRecorder
 {
     private const byte SemanticEventCodeParameterKey = 252;
 
-    private readonly IGatheringSessionService _sessionService;
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
 
     public event EventHandler<Exception>? OnRecordFailure;
 
-    public RawEventRecorder(IPhotonParser photonParser, IGatheringSessionService sessionService, IDbContextFactory<AppDbContext> dbContextFactory)
+    public RawEventRecorder(IPhotonParser photonParser, IDbContextFactory<AppDbContext> dbContextFactory)
     {
-        _sessionService = sessionService;
         _dbContextFactory = dbContextFactory;
         photonParser.OnEventReceived += (_, e) => _ = HandleEventAsync(e);
     }
@@ -41,9 +40,9 @@ public class RawEventRecorder : IRawEventRecorder
     {
         try
         {
-            var session = await _sessionService.GetActiveSessionAsync();
-
             await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+
+            var session = await dbContext.GatheringSessions.SingleOrDefaultAsync(s => s.EndTime == null);
 
             dbContext.RawGatheringEvents.Add(new RawGatheringEvent
             {
