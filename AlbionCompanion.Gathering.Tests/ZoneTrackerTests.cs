@@ -197,4 +197,31 @@ public class ZoneTrackerTests
         Assert.NotNull(active);
         Assert.Equal("some-unrecognized-format", active!.StartLocation);
     }
+
+    private sealed class ThrowingZoneCatalog : IZoneCatalog
+    {
+        public Task<ZoneInfo?> GetZoneAsync(int zoneId) => throw new InvalidOperationException("simulated catalog failure");
+        public Task<bool> IsCityOrSafeAreaAsync(int zoneId) => throw new InvalidOperationException("simulated catalog failure");
+    }
+
+    [Fact]
+    public async Task ExceptionFromZoneCatalog_RaisesOnErrorInsteadOfThrowing()
+    {
+        // Regression: a failure anywhere in this method (e.g. IZoneCatalog) used to have no
+        // observer at all - it would fault the fire-and-forget dispatch task silently, with zero
+        // trace in any log. Confirmed live on 2026-07-17 as the likely mechanism behind a run
+        // where zone recognition broke for good with nothing recorded about why.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var service = CreateService(connection);
+        var parser = new FakePhotonParser();
+        var tracker = new ZoneTracker(parser, service, new ThrowingZoneCatalog());
+        Exception? caught = null;
+        tracker.OnError += (_, ex) => caught = ex;
+
+        await tracker.HandleResponseAsync(ZoneResponse(4213));
+
+        Assert.NotNull(caught);
+        Assert.IsType<InvalidOperationException>(caught);
+    }
 }

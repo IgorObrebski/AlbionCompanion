@@ -27,6 +27,13 @@ public class ZoneTracker
     private readonly IGatheringSessionService _sessionService;
     private readonly IZoneCatalog _zoneCatalog;
 
+    // Surfaces any exception from a zone-change dispatch instead of letting it vanish as an
+    // unobserved fire-and-forget task fault. Confirmed live on 2026-07-17: a failure somewhere in
+    // this chain (e.g. IZoneCatalog) left every future zone change unrecognized for the rest of
+    // that run, with zero trace in any log - this event exists so that never happens silently
+    // again. Matches the pattern already used by RawEventRecorder.OnRecordFailure.
+    public event EventHandler<Exception>? OnError;
+
     public ZoneTracker(IPhotonParser photonParser, IGatheringSessionService sessionService, IZoneCatalog zoneCatalog)
     {
         _sessionService = sessionService;
@@ -36,45 +43,52 @@ public class ZoneTracker
 
     internal async Task HandleResponseAsync(PhotonResponse response)
     {
-        if (!response.Parameters.TryGetValue(ZoneResponseSubCodeKey, out var subCode) ||
-            Convert.ToInt32(subCode) != ZoneResponseSubCode)
+        try
         {
-            return;
-        }
-
-        if (!response.Parameters.TryGetValue(CurrentZoneIdParameterKey, out var zoneIdValue) || zoneIdValue is null)
-        {
-            return;
-        }
-
-        var parsed = ZoneIdParser.Parse(zoneIdValue);
-
-        if (parsed.IsMists)
-        {
-            await _sessionService.StartSessionAsync("Mists");
-            return;
-        }
-
-        if (parsed.NumericZoneId is { } numericZoneId)
-        {
-            // For a numeric-prefixed instance id (e.g. "1234-5"), this reuses the base zone's
-            // catalog classification - an assumption that the base id always names the
-            // containing open-world zone, never a city/safe-area itself. Holds for dungeon and
-            // hideout entrances (always open-world); the one instance type reachable from a city,
-            // the Mists, is handled by the IsMists branch above, not this one. Unconfirmed by live
-            // capture (see docs/superpowers/specs/2026-07-17-dynamic-zone-ids-design.md) - revisit
-            // if real data ever shows a base id resolving to a safe-area type.
-            if (await _zoneCatalog.IsCityOrSafeAreaAsync(numericZoneId))
+            if (!response.Parameters.TryGetValue(ZoneResponseSubCodeKey, out var subCode) ||
+                Convert.ToInt32(subCode) != ZoneResponseSubCode)
             {
-                await _sessionService.EndSessionAsync();
                 return;
             }
 
-            var zone = await _zoneCatalog.GetZoneAsync(numericZoneId);
-            await _sessionService.StartSessionAsync(zone?.Name ?? numericZoneId.ToString());
-            return;
-        }
+            if (!response.Parameters.TryGetValue(CurrentZoneIdParameterKey, out var zoneIdValue) || zoneIdValue is null)
+            {
+                return;
+            }
 
-        await _sessionService.StartSessionAsync(parsed.RawValue);
+            var parsed = ZoneIdParser.Parse(zoneIdValue);
+
+            if (parsed.IsMists)
+            {
+                await _sessionService.StartSessionAsync("Mists");
+                return;
+            }
+
+            if (parsed.NumericZoneId is { } numericZoneId)
+            {
+                // For a numeric-prefixed instance id (e.g. "1234-5"), this reuses the base zone's
+                // catalog classification - an assumption that the base id always names the
+                // containing open-world zone, never a city/safe-area itself. Holds for dungeon and
+                // hideout entrances (always open-world); the one instance type reachable from a city,
+                // the Mists, is handled by the IsMists branch above, not this one. Unconfirmed by live
+                // capture (see docs/superpowers/specs/2026-07-17-dynamic-zone-ids-design.md) - revisit
+                // if real data ever shows a base id resolving to a safe-area type.
+                if (await _zoneCatalog.IsCityOrSafeAreaAsync(numericZoneId))
+                {
+                    await _sessionService.EndSessionAsync();
+                    return;
+                }
+
+                var zone = await _zoneCatalog.GetZoneAsync(numericZoneId);
+                await _sessionService.StartSessionAsync(zone?.Name ?? numericZoneId.ToString());
+                return;
+            }
+
+            await _sessionService.StartSessionAsync(parsed.RawValue);
+        }
+        catch (Exception ex)
+        {
+            OnError?.Invoke(this, ex);
+        }
     }
 }

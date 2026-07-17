@@ -18,6 +18,7 @@ public class ZoneCatalog : IZoneCatalog
     private static readonly string[] SafeZoneTypePrefixes = { "PLAYERCITY", "SAFEAREA", "STARTINGCITY", "TUTORIAL" };
 
     private readonly HttpClient _httpClient;
+    private readonly SemaphoreSlim _loadLock = new(1, 1);
     private Dictionary<int, ZoneInfo>? _zones;
 
     public ZoneCatalog(HttpClient httpClient)
@@ -41,6 +42,15 @@ public class ZoneCatalog : IZoneCatalog
         return zone is not null && SafeZoneTypePrefixes.Any(prefix => zone.Type.StartsWith(prefix, StringComparison.Ordinal));
     }
 
+    // Single-flight guard: without this, two zone-change responses arriving close together (a
+    // realistic scenario - e.g. a fast run through a city gate) could each see _zones as null and
+    // independently kick off their own fetch of the same URL. Whichever finishes last would win
+    // and overwrite _zones, wasting a request at best; at worst, one of the two concurrent
+    // requests degrades (truncated body, transient network hiccup) without throwing and silently
+    // clobbers an already-successful load, permanently breaking every future zone lookup for the
+    // rest of the process's life with no error trail (nothing here used to log). This lock ensures
+    // the fetch happens at most once, ever, and every caller (concurrent or not) awaits the same
+    // result.
     private async Task<Dictionary<int, ZoneInfo>> EnsureLoadedAsync()
     {
         if (_zones is not null)
@@ -48,14 +58,27 @@ public class ZoneCatalog : IZoneCatalog
             return _zones;
         }
 
-        var raw = await _httpClient.GetFromJsonAsync<Dictionary<string, ZoneJsonEntry>>(ZonesJsonUrl)
-                  ?? new Dictionary<string, ZoneJsonEntry>();
+        await _loadLock.WaitAsync();
+        try
+        {
+            if (_zones is not null)
+            {
+                return _zones;
+            }
 
-        _zones = raw
-            .Where(entry => int.TryParse(entry.Key, out _))
-            .ToDictionary(entry => int.Parse(entry.Key), entry => new ZoneInfo(entry.Value.Name, entry.Value.Type));
+            var raw = await _httpClient.GetFromJsonAsync<Dictionary<string, ZoneJsonEntry>>(ZonesJsonUrl)
+                      ?? new Dictionary<string, ZoneJsonEntry>();
 
-        return _zones;
+            _zones = raw
+                .Where(entry => int.TryParse(entry.Key, out _))
+                .ToDictionary(entry => int.Parse(entry.Key), entry => new ZoneInfo(entry.Value.Name, entry.Value.Type));
+
+            return _zones;
+        }
+        finally
+        {
+            _loadLock.Release();
+        }
     }
 
     private sealed class ZoneJsonEntry

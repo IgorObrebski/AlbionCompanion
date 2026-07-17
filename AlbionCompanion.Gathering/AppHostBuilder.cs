@@ -19,6 +19,7 @@ public static class AppHostBuilder
         var eventNamesLogPath = Path.Combine(appDataPath, "debug_event_names.log");
         var parseFailuresLogPath = Path.Combine(appDataPath, "debug_parse_failures.log");
         var rawEventRecordFailuresLogPath = Path.Combine(appDataPath, "debug_raw_event_record_failures.log");
+        var zoneTrackerFailuresLogPath = Path.Combine(appDataPath, "debug_zone_tracker_failures.log");
         var dbPath = Path.Combine(appDataPath, "albion.db");
 
         var services = new ServiceCollection();
@@ -44,7 +45,7 @@ public static class AppHostBuilder
 
         // Stashed as singletons purely so RunStartupSequenceAsync can reach them without
         // recomputing from appDataPath - these are file paths, not services to inject elsewhere.
-        services.AddSingleton(new HostLogPaths(parseFailuresLogPath, rawEventRecordFailuresLogPath));
+        services.AddSingleton(new HostLogPaths(parseFailuresLogPath, rawEventRecordFailuresLogPath, zoneTrackerFailuresLogPath));
 
         return services.BuildServiceProvider();
     }
@@ -76,10 +77,13 @@ public static class AppHostBuilder
         _ = provider.GetRequiredService<IHarvestableNodeTracker>();
 
         var sessionScope = provider.CreateScope();
-        _ = sessionScope.ServiceProvider.GetRequiredService<ZoneTracker>();
+        var zoneTracker = sessionScope.ServiceProvider.GetRequiredService<ZoneTracker>();
         _ = sessionScope.ServiceProvider.GetRequiredService<GatheringEventRouter>();
 
         var logPaths = provider.GetRequiredService<HostLogPaths>();
+        zoneTracker.OnError += (_, ex) =>
+            _ = File.AppendAllTextAsync(logPaths.ZoneTrackerFailuresLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {ex.GetType().Name}: {ex.Message}{Environment.NewLine}");
+
         var rawEventRecorder = (RawEventRecorder)sessionScope.ServiceProvider.GetRequiredService<IRawEventRecorder>();
         rawEventRecorder.OnRecordFailure += (_, ex) =>
             _ = File.AppendAllTextAsync(logPaths.RawEventRecordFailuresLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {ex.GetType().Name}: {ex.Message}{Environment.NewLine}");
@@ -96,5 +100,5 @@ public static class AppHostBuilder
         return sessionScope;
     }
 
-    private sealed record HostLogPaths(string ParseFailuresLogPath, string RawEventRecordFailuresLogPath);
+    private sealed record HostLogPaths(string ParseFailuresLogPath, string RawEventRecordFailuresLogPath, string ZoneTrackerFailuresLogPath);
 }
