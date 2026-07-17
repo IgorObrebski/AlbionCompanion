@@ -2,12 +2,37 @@ namespace AlbionCompanion.Gathering;
 
 public class GatheringLiveState : IGatheringLiveState
 {
+    // Mutated on the packet-capture/parse thread (via GatheringEventRouter's fire-and-forget event
+    // dispatch), read and enumerated on the Blazor UI thread (Home.razor's render). _lock protects
+    // every access to the mutable fields below; ItemTotals hands out an immutable snapshot copy
+    // rather than the live dictionary, so a UI-thread enumeration can never race a capture-thread
+    // mutation (Dictionary<> itself does not support concurrent read/write).
+    private readonly object _lock = new();
     private readonly Dictionary<string, int> _itemTotals = new();
 
-    public bool IsActive { get; private set; }
-    public string? StartLocation { get; private set; }
-    public int TotalFame { get; private set; }
-    public IReadOnlyDictionary<string, int> ItemTotals => _itemTotals;
+    private bool _isActive;
+    private string? _startLocation;
+    private int _totalFame;
+
+    public bool IsActive
+    {
+        get { lock (_lock) { return _isActive; } }
+    }
+
+    public string? StartLocation
+    {
+        get { lock (_lock) { return _startLocation; } }
+    }
+
+    public int TotalFame
+    {
+        get { lock (_lock) { return _totalFame; } }
+    }
+
+    public IReadOnlyDictionary<string, int> ItemTotals
+    {
+        get { lock (_lock) { return new Dictionary<string, int>(_itemTotals); } }
+    }
 
     public event EventHandler? OnChanged;
 
@@ -15,27 +40,39 @@ public class GatheringLiveState : IGatheringLiveState
     {
         sessionService.OnSessionStarted += (_, session) => Safely(() =>
         {
-            _itemTotals.Clear();
-            TotalFame = 0;
-            StartLocation = session.StartLocation;
-            IsActive = true;
+            lock (_lock)
+            {
+                _itemTotals.Clear();
+                _totalFame = 0;
+                _startLocation = session.StartLocation;
+                _isActive = true;
+            }
         });
 
         sessionService.OnSessionEnded += (_, _) => Safely(() =>
         {
-            IsActive = false;
+            lock (_lock)
+            {
+                _isActive = false;
+            }
         });
 
         sessionService.OnItemAdded += (_, item) => Safely(() =>
         {
             var itemId = item.ItemId;
             var amount = item.Amount;
-            _itemTotals[itemId] = _itemTotals.GetValueOrDefault(itemId) + amount;
+            lock (_lock)
+            {
+                _itemTotals[itemId] = _itemTotals.GetValueOrDefault(itemId) + amount;
+            }
         });
 
         sessionService.OnFameAdded += (_, fameLog) => Safely(() =>
         {
-            TotalFame += fameLog.Amount;
+            lock (_lock)
+            {
+                _totalFame += fameLog.Amount;
+            }
         });
     }
 
