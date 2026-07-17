@@ -4,7 +4,11 @@
 
 <h1>Session Detail</h1>
 
-@if (_detail is null)
+@if (_loadFailed)
+{
+    <p>Could not load this session yet — the database may still be initializing. Try again shortly.</p>
+}
+else if (_detail is null)
 {
     <p>Session not found.</p>
 }
@@ -40,9 +44,21 @@ else
     public Guid SessionId { get; set; }
 
     private AlbionCompanion.Gathering.SessionDetail? _detail;
+    private bool _loadFailed;
 
     protected override async Task OnParametersSetAsync()
     {
-        _detail = await HistoryService.GetSessionDetailAsync(SessionId);
+        try
+        {
+            _detail = await HistoryService.GetSessionDetailAsync(SessionId);
+        }
+        catch
+        {
+            // Only expected on a first-ever launch, if the user navigates here before
+            // AppHostBuilder.RunStartupSequenceAsync's migration (running concurrently on a
+            // separate DbContext) has created the schema. Degrade to a retry message instead of
+            // an unhandled Blazor error.
+            _loadFailed = true;
+        }
     }
 }

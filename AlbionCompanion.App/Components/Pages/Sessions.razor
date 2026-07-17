@@ -4,7 +4,11 @@
 
 <h1>Sessions</h1>
 
-@if (_sessions is null)
+@if (_loadFailed)
+{
+    <p>Could not load sessions yet — the database may still be initializing. Try again shortly.</p>
+}
+else if (_sessions is null)
 {
     <p>Loading...</p>
 }
@@ -30,7 +34,7 @@ else
                 <tr @onclick="() => NavigateToDetail(session.Id)" style="cursor:pointer">
                     <td>@session.StartTime.ToLocalTime().ToString("g")</td>
                     <td>@session.StartLocation</td>
-                    <td>@((session.EndTime - session.StartTime).ToString(@"hh\:mm\:ss"))</td>
+                    <td>@FormatDuration(session.EndTime - session.StartTime)</td>
                     <td>@session.TotalFameEarned</td>
                     <td>@session.TotalItemsCollected</td>
                 </tr>
@@ -41,14 +45,31 @@ else
 
 @code {
     private IReadOnlyList<SessionSummary>? _sessions;
+    private bool _loadFailed;
 
     [Inject]
     private NavigationManager Navigation { get; set; } = null!;
 
     protected override async Task OnInitializedAsync()
     {
-        _sessions = await HistoryService.GetCompletedSessionsAsync();
+        try
+        {
+            _sessions = await HistoryService.GetCompletedSessionsAsync();
+        }
+        catch
+        {
+            // Only expected on a first-ever launch, if the user navigates here before
+            // AppHostBuilder.RunStartupSequenceAsync's migration (running concurrently on a
+            // separate DbContext) has created the schema. Degrade to a retry message instead of
+            // an unhandled Blazor error.
+            _loadFailed = true;
+        }
     }
+
+    private static string FormatDuration(TimeSpan duration) =>
+        duration.Days > 0
+            ? duration.ToString(@"d\.hh\:mm\:ss")
+            : duration.ToString(@"hh\:mm\:ss");
 
     private void NavigateToDetail(Guid sessionId) =>
         Navigation.NavigateTo($"/sessions/{sessionId}");
