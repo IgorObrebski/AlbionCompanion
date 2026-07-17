@@ -49,4 +49,14 @@ public class ZoneIdParserTests
         Assert.Null(result.NumericZoneId);
         Assert.False(result.IsMists);
     }
+
+    [Fact]
+    public void NullValue_DoesNotThrow_ReturnsUnrecognized()
+    {
+        var result = ZoneIdParser.Parse(null);
+
+        Assert.Null(result.NumericZoneId);
+        Assert.False(result.IsMists);
+        Assert.Equal(string.Empty, result.RawValue);
+    }
 }

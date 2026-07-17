@@ -12,14 +12,14 @@ public static class ZoneIdParser
 {
     private const string MistsPrefix = "@MISTS@";
 
-    public static ParsedZoneId Parse(object zoneIdValue)
+    public static ParsedZoneId Parse(object? zoneIdValue)
     {
         if (zoneIdValue is int numeric)
         {
             return new ParsedZoneId(numeric, IsMists: false, RawValue: numeric.ToString());
         }
 
-        var raw = zoneIdValue.ToString() ?? string.Empty;
+        var raw = zoneIdValue?.ToString() ?? string.Empty;
 
         if (raw.StartsWith(MistsPrefix, StringComparison.Ordinal))
         {
