@@ -49,6 +49,10 @@ public class ZoneTrackerTests
         new(OperationCode: 1, ReturnCode: 0, DebugMessage: string.Empty,
             Parameters: new Dictionary<byte, object?> { [253] = 2, [8] = zoneId });
 
+    private static PhotonResponse ZoneResponse(object zoneIdValue) =>
+        new(OperationCode: 1, ReturnCode: 0, DebugMessage: string.Empty,
+            Parameters: new Dictionary<byte, object?> { [253] = 2, [8] = zoneIdValue });
+
     [Fact]
     public async Task EnteringOpenWorldZone_StartsSessionWithZoneName()
     {
@@ -137,5 +141,60 @@ public class ZoneTrackerTests
             new Dictionary<byte, object?> { [253] = 52, [8] = 999 }));
 
         Assert.Null(await service.GetActiveSessionAsync());
+    }
+
+    [Fact]
+    public async Task EnteringMists_StartsSessionNamedMists()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var service = CreateService(connection);
+        var parser = new FakePhotonParser();
+        _ = new ZoneTracker(parser, service, new FakeZoneCatalog(SampleZones));
+
+        parser.RaiseResponse(ZoneResponse("@MISTS@abc-guid-looking-string"));
+        await Task.Delay(20);
+
+        var active = await service.GetActiveSessionAsync();
+        Assert.NotNull(active);
+        Assert.Equal("Mists", active!.StartLocation);
+    }
+
+    [Fact]
+    public async Task EnteringNumericPrefixedInstance_ResolvesBaseZoneName()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var service = CreateService(connection);
+        var parser = new FakePhotonParser();
+        _ = new ZoneTracker(parser, service, new FakeZoneCatalog(SampleZones));
+
+        parser.RaiseResponse(ZoneResponse("4213-5")); // dynamic instance of Cairn Camain
+        await Task.Delay(20);
+
+        var active = await service.GetActiveSessionAsync();
+        Assert.NotNull(active);
+        Assert.Equal("Cairn Camain", active!.StartLocation);
+    }
+
+    [Fact]
+    public async Task EnteringUnrecognizedStringZoneId_DoesNotThrowAndUsesRawValue()
+    {
+        // Regression: ZoneTracker used to call Convert.ToInt32(zoneIdValue) unconditionally, which
+        // threw FormatException on any non-numeric zone id - lost silently since dispatch is
+        // fire-and-forget. This must no longer throw, and the fire-and-forget dispatch must still
+        // reach GatheringSessionService.StartSessionAsync with the raw value.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var service = CreateService(connection);
+        var parser = new FakePhotonParser();
+        _ = new ZoneTracker(parser, service, new FakeZoneCatalog(SampleZones));
+
+        parser.RaiseResponse(ZoneResponse("some-unrecognized-format"));
+        await Task.Delay(20);
+
+        var active = await service.GetActiveSessionAsync();
+        Assert.NotNull(active);
+        Assert.Equal("some-unrecognized-format", active!.StartLocation);
     }
 }

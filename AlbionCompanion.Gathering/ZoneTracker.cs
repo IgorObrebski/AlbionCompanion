@@ -13,6 +13,11 @@ namespace AlbionCompanion.Gathering;
 // session. IZoneCatalog (ao-bin-dumps zones.json) now classifies each zone as city/safe-area vs.
 // open world directly, which handles bank/market/portals correctly without needing to remember
 // where the player started.
+//
+// Parameter 8's value isn't always numeric: dynamic instances (dungeons, hideouts, the Mists) use
+// non-numeric ids in practice (see docs/superpowers/specs/2026-07-17-dynamic-zone-ids-design.md).
+// ZoneIdParser classifies the raw value defensively so this method never throws on a shape it
+// doesn't recognize.
 public class ZoneTracker
 {
     private const byte ZoneResponseSubCodeKey = 253;
@@ -42,15 +47,27 @@ public class ZoneTracker
             return;
         }
 
-        var zoneId = Convert.ToInt32(zoneIdValue);
+        var parsed = ZoneIdParser.Parse(zoneIdValue);
 
-        if (await _zoneCatalog.IsCityOrSafeAreaAsync(zoneId))
+        if (parsed.IsMists)
         {
-            await _sessionService.EndSessionAsync();
+            await _sessionService.StartSessionAsync("Mists");
             return;
         }
 
-        var zone = await _zoneCatalog.GetZoneAsync(zoneId);
-        await _sessionService.StartSessionAsync(zone?.Name ?? zoneId.ToString());
+        if (parsed.NumericZoneId is { } numericZoneId)
+        {
+            if (await _zoneCatalog.IsCityOrSafeAreaAsync(numericZoneId))
+            {
+                await _sessionService.EndSessionAsync();
+                return;
+            }
+
+            var zone = await _zoneCatalog.GetZoneAsync(numericZoneId);
+            await _sessionService.StartSessionAsync(zone?.Name ?? numericZoneId.ToString());
+            return;
+        }
+
+        await _sessionService.StartSessionAsync(parsed.RawValue);
     }
 }
