@@ -57,6 +57,13 @@ public class ZoneTracker
 
         if (parsed.NumericZoneId is { } numericZoneId)
         {
+            // For a numeric-prefixed instance id (e.g. "1234-5"), this reuses the base zone's
+            // catalog classification - an assumption that the base id always names the
+            // containing open-world zone, never a city/safe-area itself. Holds for dungeon and
+            // hideout entrances (always open-world); the one instance type reachable from a city,
+            // the Mists, is handled by the IsMists branch above, not this one. Unconfirmed by live
+            // capture (see docs/superpowers/specs/2026-07-17-dynamic-zone-ids-design.md) - revisit
+            // if real data ever shows a base id resolving to a safe-area type.
             if (await _zoneCatalog.IsCityOrSafeAreaAsync(numericZoneId))
             {
                 await _sessionService.EndSessionAsync();
