@@ -7,6 +7,7 @@ public static class MauiProgram
 {
     public static ServiceProvider? GatheringProvider { get; private set; }
     public static IServiceScope? GatheringSessionScope { get; set; }
+    public static IServiceProvider? Services { get; private set; }
 
     public static MauiApp CreateMauiApp()
     {
@@ -19,6 +20,7 @@ public static class MauiProgram
             });
 
         builder.Services.AddMauiBlazorWebView();
+        builder.Services.AddSingleton<IGatheringLiveState, GatheringLiveState>();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
@@ -29,6 +31,8 @@ public static class MauiProgram
         Directory.CreateDirectory(appDataPath);
         GatheringProvider = AppHostBuilder.BuildServiceProvider(appDataPath);
 
-        return builder.Build();
+        var app = builder.Build();
+        Services = app.Services;
+        return app;
     }
 }

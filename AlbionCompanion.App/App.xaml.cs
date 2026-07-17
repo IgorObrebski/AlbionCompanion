@@ -32,6 +32,10 @@ public partial class App : Application
             return;
         }
 
-        MauiProgram.GatheringSessionScope = await AppHostBuilder.RunStartupSequenceAsync(MauiProgram.GatheringProvider);
+        var sessionScope = await AppHostBuilder.RunStartupSequenceAsync(MauiProgram.GatheringProvider);
+        MauiProgram.GatheringSessionScope = sessionScope;
+
+        var sessionService = sessionScope.ServiceProvider.GetRequiredService<IGatheringSessionService>();
+        MauiProgram.Services?.GetRequiredService<IGatheringLiveState>().Attach(sessionService);
     }
 }

@@ -1,5 +1,50 @@
 @page "/"
+@using AlbionCompanion.Gathering
+@inject IGatheringLiveState LiveState
+@implements IDisposable
 
 <h1>AlbionCompanion</h1>
 
-<p>Sniffer host running.</p>
+@if (LiveState.StartLocation is null)
+{
+    <p>No session.</p>
+}
+else
+{
+    <p>@(LiveState.IsActive ? "Active" : "Ended") — @LiveState.StartLocation</p>
+    <p>Total fame: @LiveState.TotalFame</p>
+
+    @if (LiveState.ItemTotals.Count == 0)
+    {
+        <p>No items collected yet.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr><th>Item</th><th>Amount</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var (itemId, amount) in LiveState.ItemTotals)
+                {
+                    <tr><td>@itemId</td><td>@amount</td></tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        LiveState.OnChanged += HandleChanged;
+    }
+
+    private void HandleChanged(object? sender, EventArgs e) =>
+        InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        LiveState.OnChanged -= HandleChanged;
+    }
+}
