@@ -1,4 +1,6 @@
+using AlbionCompanion.Core.Data;
 using AlbionCompanion.Gathering;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace AlbionCompanion.App;
@@ -21,6 +23,8 @@ public static class MauiProgram
 
         builder.Services.AddMauiBlazorWebView();
         builder.Services.AddSingleton<IGatheringLiveState, GatheringLiveState>();
+        builder.Services.AddSingleton<ISessionHistoryService>(_ =>
+            new SessionHistoryService(GatheringProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>()));
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();

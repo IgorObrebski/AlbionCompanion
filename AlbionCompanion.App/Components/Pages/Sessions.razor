@@ -1,0 +1,55 @@
+@page "/sessions"
+@using AlbionCompanion.Gathering
+@inject ISessionHistoryService HistoryService
+
+<h1>Sessions</h1>
+
+@if (_sessions is null)
+{
+    <p>Loading...</p>
+}
+else if (_sessions.Count == 0)
+{
+    <p>No completed sessions yet.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Start</th>
+                <th>Location</th>
+                <th>Duration</th>
+                <th>Fame</th>
+                <th>Items</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var session in _sessions)
+            {
+                <tr @onclick="() => NavigateToDetail(session.Id)" style="cursor:pointer">
+                    <td>@session.StartTime.ToLocalTime().ToString("g")</td>
+                    <td>@session.StartLocation</td>
+                    <td>@((session.EndTime - session.StartTime).ToString(@"hh\:mm\:ss"))</td>
+                    <td>@session.TotalFameEarned</td>
+                    <td>@session.TotalItemsCollected</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<SessionSummary>? _sessions;
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _sessions = await HistoryService.GetCompletedSessionsAsync();
+    }
+
+    private void NavigateToDetail(Guid sessionId) =>
+        Navigation.NavigateTo($"/sessions/{sessionId}");
+}

@@ -1,0 +1,48 @@
+@page "/sessions/{SessionId:guid}"
+@using AlbionCompanion.Gathering
+@inject ISessionHistoryService HistoryService
+
+<h1>Session Detail</h1>
+
+@if (_detail is null)
+{
+    <p>Session not found.</p>
+}
+else
+{
+    <p>@_detail.StartLocation — @_detail.StartTime.ToLocalTime().ToString("g") to @_detail.EndTime.ToLocalTime().ToString("g")</p>
+    <p>Total fame: @_detail.TotalFameEarned</p>
+
+    @if (_detail.ItemTotals.Count == 0)
+    {
+        <p>No items collected.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr><th>Item</th><th>Amount</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var (itemId, amount) in _detail.ItemTotals)
+                {
+                    <tr><td>@itemId</td><td>@amount</td></tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+<p><a href="/sessions">Back to sessions</a></p>
+
+@code {
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    private AlbionCompanion.Gathering.SessionDetail? _detail;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _detail = await HistoryService.GetSessionDetailAsync(SessionId);
+    }
+}
