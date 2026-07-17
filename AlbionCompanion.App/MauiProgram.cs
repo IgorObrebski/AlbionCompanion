@@ -10,6 +10,7 @@ public static class MauiProgram
     public static ServiceProvider? GatheringProvider { get; private set; }
     public static IServiceScope? GatheringSessionScope { get; set; }
     public static IServiceProvider? Services { get; private set; }
+    public static string? AppDataPath { get; private set; }
 
     public static MauiApp CreateMauiApp()
     {
@@ -31,9 +32,9 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AlbionCompanion");
-        Directory.CreateDirectory(appDataPath);
-        GatheringProvider = AppHostBuilder.BuildServiceProvider(appDataPath);
+        AppDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AlbionCompanion");
+        Directory.CreateDirectory(AppDataPath);
+        GatheringProvider = AppHostBuilder.BuildServiceProvider(AppDataPath);
 
         var app = builder.Build();
         Services = app.Services;
