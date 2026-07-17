@@ -58,6 +58,39 @@ public class AlbionPhotonParserTests
     }
 
     [Fact]
+    public void OnResponse_OneThrowingSubscriber_DoesNotPreventLaterSubscribersFromRunning()
+    {
+        // Regression: RaiseIsolated used to wrap the entire multicast Invoke() in one try/catch.
+        // Since a multicast delegate invokes subscribers sequentially and a throw aborts the rest
+        // of the invocation list, any subscriber registered AFTER a throwing one would silently
+        // never run for that event - confirmed as a live, real risk on 2026-07-17 while
+        // investigating a session where zone-change recognition intermittently and silently broke.
+        var parser = new TestablePhotonParser();
+        var secondSubscriberRan = false;
+        parser.OnResponseReceived += (_, _) => throw new InvalidOperationException("first subscriber fails");
+        parser.OnResponseReceived += (_, _) => secondSubscriberRan = true;
+
+        var exception = Record.Exception(() => parser.InvokeOnResponse(1, 0, string.Empty, new Dictionary<byte, object?>()));
+
+        Assert.Null(exception);
+        Assert.True(secondSubscriberRan);
+    }
+
+    [Fact]
+    public void OnResponse_ThrowingSubscriber_RaisesOnParseFailure()
+    {
+        var parser = new TestablePhotonParser();
+        Exception? caught = null;
+        parser.OnParseFailure += (_, ex) => caught = ex;
+        parser.OnResponseReceived += (_, _) => throw new InvalidOperationException("simulated failure");
+
+        parser.InvokeOnResponse(1, 0, string.Empty, new Dictionary<byte, object?>());
+
+        Assert.NotNull(caught);
+        Assert.IsType<InvalidOperationException>(caught);
+    }
+
+    [Fact]
     public void HandlePayload_DoesNotThrow_WhenUnderlyingParserFailsOnMalformedCommand()
     {
         // 12-byte Photon header (peerId=0, flags=0, commandCount=1, timestamp=0, challenge=0) with

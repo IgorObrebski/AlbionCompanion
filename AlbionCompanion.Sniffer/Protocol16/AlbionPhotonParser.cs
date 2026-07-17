@@ -27,28 +27,46 @@ public class AlbionPhotonParser : PhotonParser, IPhotonParser
     }
 
     protected override void OnEvent(byte code, Dictionary<byte, object?> parameters) =>
-        RaiseIsolated(() => OnEventReceived?.Invoke(this, new PhotonEvent(code, parameters)));
+        RaiseIsolated(OnEventReceived, new PhotonEvent(code, parameters));
 
     protected override void OnRequest(byte operationCode, Dictionary<byte, object?> parameters) =>
-        RaiseIsolated(() => OnRequestReceived?.Invoke(this, new PhotonRequest(operationCode, parameters)));
+        RaiseIsolated(OnRequestReceived, new PhotonRequest(operationCode, parameters));
 
     protected override void OnResponse(byte operationCode, short returnCode, string debugMessage, Dictionary<byte, object?> parameters) =>
-        RaiseIsolated(() => OnResponseReceived?.Invoke(this, new PhotonResponse(operationCode, returnCode, debugMessage, parameters)));
+        RaiseIsolated(OnResponseReceived, new PhotonResponse(operationCode, returnCode, debugMessage, parameters));
 
     // These overrides run synchronously inside PhotonParser.ReceivePacket's per-command loop
     // (see HandlePayload's NOTE). A subscriber that throws here - confirmed via live capture:
     // Convert.ToByte overflowing on an unexpectedly large parameter value - would otherwise
     // propagate out of ReceivePacket and abort every remaining command in the same UDP datagram,
     // silently dropping unrelated data that had nothing to do with the failing subscriber.
-    private void RaiseIsolated(Action raiseEvent)
+    //
+    // Isolated PER SUBSCRIBER, not per overall dispatch: a plain `handler?.Invoke(...)` on a
+    // multicast delegate with multiple independent subscribers (e.g. AlbionEventLogger,
+    // LocalPlayerTracker, ZoneTracker all listen to OnResponseReceived) stops at the first
+    // throwing subscriber - every subscriber registered AFTER it in the invocation list silently
+    // never runs for that one event, with nothing in any log identifying which subscriber failed
+    // or which later ones got skipped. Confirmed as a live, real risk on 2026-07-17 investigating
+    // a session where zone changes intermittently went unrecognized with no error trail. Invoking
+    // each subscriber in its own try/catch means one broken handler can never silently starve
+    // another.
+    private void RaiseIsolated<TEventArgs>(EventHandler<TEventArgs>? handler, TEventArgs args)
     {
-        try
+        if (handler is null)
         {
-            raiseEvent();
+            return;
         }
-        catch (Exception ex)
+
+        foreach (var subscriber in handler.GetInvocationList())
         {
-            OnParseFailure?.Invoke(this, ex);
+            try
+            {
+                ((EventHandler<TEventArgs>)subscriber).Invoke(this, args);
+            }
+            catch (Exception ex)
+            {
+                OnParseFailure?.Invoke(this, ex);
+            }
         }
     }
 }
