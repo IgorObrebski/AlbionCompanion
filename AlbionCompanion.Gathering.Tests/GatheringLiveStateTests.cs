@@ -11,11 +11,14 @@ public class GatheringLiveStateTests
         public event EventHandler<GatheredItem>? OnItemAdded;
         public event EventHandler<FameLog>? OnFameAdded;
 
+        public ActiveSessionSnapshot? SnapshotToReturn { get; set; }
+
         public Task StartSessionAsync(string location) => Task.CompletedTask;
         public Task EndSessionAsync() => Task.CompletedTask;
         public Task AddItemAsync(string itemId, int amount) => Task.CompletedTask;
         public Task AddFameAsync(string fameType, int amount) => Task.CompletedTask;
         public Task<GatheringSession?> GetActiveSessionAsync() => Task.FromResult<GatheringSession?>(null);
+        public Task<ActiveSessionSnapshot?> GetActiveSessionSnapshotAsync() => Task.FromResult(SnapshotToReturn);
 
         public void RaiseSessionStarted(GatheringSession session) => OnSessionStarted?.Invoke(this, session);
         public void RaiseSessionEnded(GatheringSession session) => OnSessionEnded?.Invoke(this, session);
@@ -24,11 +27,11 @@ public class GatheringLiveStateTests
     }
 
     [Fact]
-    public void OnItemAdded_NewItem_AppearsInItemTotals()
+    public async Task OnItemAdded_NewItem_AppearsInItemTotals()
     {
         var liveState = new GatheringLiveState();
         var service = new FakeGatheringSessionService();
-        liveState.Attach(service);
+        await liveState.Attach(service);
 
         service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 5 });
 
@@ -36,11 +39,11 @@ public class GatheringLiveStateTests
     }
 
     [Fact]
-    public void OnItemAdded_SameItemTwice_AmountsSum()
+    public async Task OnItemAdded_SameItemTwice_AmountsSum()
     {
         var liveState = new GatheringLiveState();
         var service = new FakeGatheringSessionService();
-        liveState.Attach(service);
+        await liveState.Attach(service);
 
         service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 5 });
         service.RaiseItemAdded(new AlbionCompanion.Core.Models.GatheredItem { ItemId = "T4_ORE", Amount = 3 });
@@ -49,11 +52,11 @@ public class GatheringLiveStateTests
     }
 
     [Fact]
-    public void OnFameAdded_Twice_TotalFameAccumulates()
+    public async Task OnFameAdded_Twice_TotalFameAccumulates()
     {
         var liveState = new GatheringLiveState();
         var service = new FakeGatheringSessionService();
-        liveState.Attach(service);
+        await liveState.Attach(service);
 
         service.RaiseFameAdded(new FameLog { FameType = "Gathering", Amount = 300 });
         service.RaiseFameAdded(new AlbionCompanion.Core.Models.FameLog { FameType = "Gathering", Amount = 600 });
@@ -62,11 +65,11 @@ public class GatheringLiveStateTests
     }
 
     [Fact]
-    public void OnSessionStarted_AfterPriorActivity_ResetsState()
+    public async Task OnSessionStarted_AfterPriorActivity_ResetsState()
     {
         var liveState = new GatheringLiveState();
         var service = new FakeGatheringSessionService();
-        liveState.Attach(service);
+        await liveState.Attach(service);
         service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 5 });
         service.RaiseFameAdded(new FameLog { FameType = "Gathering", Amount = 300 });
 
@@ -79,11 +82,11 @@ public class GatheringLiveStateTests
     }
 
     [Fact]
-    public void OnSessionEnded_LeavesDataUnchangedButMarksInactive()
+    public async Task OnSessionEnded_LeavesDataUnchangedButMarksInactive()
     {
         var liveState = new GatheringLiveState();
         var service = new FakeGatheringSessionService();
-        liveState.Attach(service);
+        await liveState.Attach(service);
         service.RaiseSessionStarted(new GatheringSession { StartLocation = "Martlock" });
         service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 5 });
         service.RaiseFameAdded(new FameLog { FameType = "Gathering", Amount = 300 });
@@ -97,11 +100,11 @@ public class GatheringLiveStateTests
     }
 
     [Fact]
-    public void EachHandler_RaisesOnChangedExactlyOnce()
+    public async Task EachHandler_RaisesOnChangedExactlyOnce()
     {
         var liveState = new GatheringLiveState();
         var service = new FakeGatheringSessionService();
-        liveState.Attach(service);
+        await liveState.Attach(service);
         var raiseCount = 0;
         liveState.OnChanged += (_, _) => raiseCount++;
 
@@ -111,5 +114,65 @@ public class GatheringLiveStateTests
         service.RaiseSessionEnded(new GatheringSession { StartLocation = "Martlock" });
 
         Assert.Equal(4, raiseCount);
+    }
+
+    [Fact]
+    public async Task Attach_WithAlreadyActiveSession_RehydratesStateFromSnapshot()
+    {
+        // Regression: found live 2026-08-02 - closing the app normally while standing in open
+        // world (active session in the DB, not yet ended) and relaunching while still in open
+        // world left Home showing "No session" until the next gather/zone-change action, even
+        // though a session had been running the whole time. OnSessionStarted only fires for a
+        // session created during *this* process's lifetime - a session that already existed in
+        // the DB before startup needs to be read back explicitly.
+        var liveState = new GatheringLiveState();
+        var service = new FakeGatheringSessionService
+        {
+            SnapshotToReturn = new ActiveSessionSnapshot(
+                CurrentLocation: "Cairn Camain",
+                TotalFameEarned: 150,
+                ItemTotals: new Dictionary<string, int> { ["T4_ORE"] = 12 }),
+        };
+
+        await liveState.Attach(service);
+
+        Assert.True(liveState.IsActive);
+        Assert.Equal("Cairn Camain", liveState.StartLocation);
+        Assert.Equal(150, liveState.TotalFame);
+        Assert.Equal(12, liveState.ItemTotals["T4_ORE"]);
+    }
+
+    [Fact]
+    public async Task Attach_WithNoActiveSession_LeavesStateAtDefaults()
+    {
+        var liveState = new GatheringLiveState();
+        var service = new FakeGatheringSessionService { SnapshotToReturn = null };
+
+        await liveState.Attach(service);
+
+        Assert.False(liveState.IsActive);
+        Assert.Null(liveState.StartLocation);
+        Assert.Equal(0, liveState.TotalFame);
+        Assert.Empty(liveState.ItemTotals);
+    }
+
+    [Fact]
+    public async Task Attach_WithAlreadyActiveSession_SubsequentEventsAccumulateOnTopOfSnapshot()
+    {
+        var liveState = new GatheringLiveState();
+        var service = new FakeGatheringSessionService
+        {
+            SnapshotToReturn = new ActiveSessionSnapshot(
+                CurrentLocation: "Cairn Camain",
+                TotalFameEarned: 150,
+                ItemTotals: new Dictionary<string, int> { ["T4_ORE"] = 12 }),
+        };
+
+        await liveState.Attach(service);
+        service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 1 });
+        service.RaiseFameAdded(new FameLog { FameType = "Gathering", Amount = 15 });
+
+        Assert.Equal(13, liveState.ItemTotals["T4_ORE"]);
+        Assert.Equal(165, liveState.TotalFame);
     }
 }

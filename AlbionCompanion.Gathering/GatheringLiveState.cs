@@ -36,8 +36,33 @@ public class GatheringLiveState : IGatheringLiveState
 
     public event EventHandler? OnChanged;
 
-    public void Attach(IGatheringSessionService sessionService)
+    public async Task Attach(IGatheringSessionService sessionService)
     {
+        // Rehydrate from the DB first: if the app was closed and relaunched while a session was
+        // still open (e.g. the player stayed in open world across the restart), that session's row
+        // survived (StartSessionAsync's roaming behavior never ends it), but OnSessionStarted only
+        // fires for a session created *during this process's lifetime* - without this, the UI would
+        // wrongly show "No session" until the player's next gather/zone-change action, even though
+        // one has been running the whole time. Safe to do before wiring the event handlers below:
+        // any event that arrives after this snapshot can only describe genuinely new activity (a
+        // domain event only fires once, at the moment its action happens - there's no replay), so
+        // there's no risk of double-counting an item or fame entry the snapshot already included.
+        if (await sessionService.GetActiveSessionSnapshotAsync() is { } snapshot)
+        {
+            lock (_lock)
+            {
+                _isActive = true;
+                _startLocation = snapshot.CurrentLocation;
+                _totalFame = snapshot.TotalFameEarned;
+                foreach (var (itemId, amount) in snapshot.ItemTotals)
+                {
+                    _itemTotals[itemId] = amount;
+                }
+            }
+
+            OnChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         sessionService.OnSessionStarted += (_, session) => Safely(() =>
         {
             lock (_lock)

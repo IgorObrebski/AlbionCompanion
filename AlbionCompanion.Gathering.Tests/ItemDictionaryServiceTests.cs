@@ -22,6 +22,20 @@ public class ItemDictionaryServiceTests
             });
     }
 
+    private sealed class SingleConnectionDbContextFactory : IDbContextFactory<AppDbContext>
+    {
+        private readonly DbContextOptions<AppDbContext> _options;
+
+        public SingleConnectionDbContextFactory(SqliteConnection connection)
+        {
+            _options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options;
+        }
+
+        public AppDbContext CreateDbContext() => new(_options);
+
+        public Task<AppDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
     private const string SampleItemsJson = """
         [
             {
@@ -44,7 +58,7 @@ public class ItemDictionaryServiceTests
         var context = new AppDbContext(options);
         context.Database.EnsureCreated();
         var httpClient = new HttpClient(new FakeHttpMessageHandler(json));
-        return (new ItemDictionaryService(context, httpClient), context);
+        return (new ItemDictionaryService(new SingleConnectionDbContextFactory(connection), httpClient), context);
     }
 
     [Fact]
@@ -100,10 +114,8 @@ public class ItemDictionaryServiceTests
         await service.SeedFromJsonAsync();
 
         // A second call with a handler that would throw if invoked confirms no re-fetch happens.
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options;
-        var secondContext = new AppDbContext(options);
         var throwingClient = new HttpClient(new ThrowingHttpMessageHandler());
-        var secondService = new ItemDictionaryService(secondContext, throwingClient);
+        var secondService = new ItemDictionaryService(new SingleConnectionDbContextFactory(connection), throwingClient);
 
         await secondService.SeedFromJsonAsync();
 
@@ -139,5 +151,21 @@ public class ItemDictionaryServiceTests
 
         var result = Assert.Single(results);
         Assert.Equal("T4_ORE", result.UniqueName);
+    }
+
+    [Fact]
+    public async Task GetItemsByIdAsync_ReturnsRequestedEntriesKeyedByUniqueName()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection, SampleItemsJson);
+        await service.SeedFromJsonAsync();
+
+        var results = await service.GetItemsByIdAsync(new[] { "T4_ORE", "MAIN_SWORD", "T99_DOES_NOT_EXIST" });
+
+        Assert.Equal(2, results.Count);
+        Assert.Equal("Iron Ore", results["T4_ORE"].DisplayNameEN);
+        Assert.Equal("Sword", results["MAIN_SWORD"].DisplayNameEN);
+        Assert.False(results.ContainsKey("T99_DOES_NOT_EXIST"));
     }
 }

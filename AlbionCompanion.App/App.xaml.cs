@@ -39,7 +39,10 @@ public partial class App : Application
             MauiProgram.GatheringSessionScope = sessionScope;
 
             var sessionService = sessionScope.ServiceProvider.GetRequiredService<IGatheringSessionService>();
-            MauiProgram.Services?.GetRequiredService<IGatheringLiveState>().Attach(sessionService);
+            if (MauiProgram.Services?.GetRequiredService<IGatheringLiveState>() is { } liveState)
+            {
+                await liveState.Attach(sessionService);
+            }
         }
         catch (Exception ex)
         {

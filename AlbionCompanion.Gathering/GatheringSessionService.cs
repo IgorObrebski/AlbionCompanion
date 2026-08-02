@@ -21,6 +21,23 @@ public class GatheringSessionService : IGatheringSessionService
     public async Task<GatheringSession?> GetActiveSessionAsync() =>
         await _dbContext.GatheringSessions.SingleOrDefaultAsync(session => session.EndTime == null);
 
+    public async Task<ActiveSessionSnapshot?> GetActiveSessionSnapshotAsync()
+    {
+        var session = await GetActiveSessionAsync();
+        if (session is null)
+        {
+            return null;
+        }
+
+        var itemTotals = await _dbContext.GatheredItems
+            .Where(item => item.SessionId == session.Id)
+            .GroupBy(item => item.ItemId)
+            .Select(g => new { g.Key, Total = g.Sum(item => item.Amount) })
+            .ToDictionaryAsync(x => x.Key, x => x.Total);
+
+        return new ActiveSessionSnapshot(session.CurrentLocation, session.TotalFameEarned, itemTotals);
+    }
+
     public async Task StartSessionAsync(string location)
     {
         // Invariant: at most one open (EndTime == null) session at a time. A wilderness session

@@ -1,21 +1,33 @@
+using System.Text.RegularExpressions;
+
 namespace AlbionCompanion.App;
 
-// Maps a GatheredItems.ItemId (usually "T{tier}_{CATEGORY}", occasionally a bare numeric fallback -
-// see ZoneIdParser/HarvestableNodeTracker's "tier unresolved" gap) to display metadata for the UI:
-// which category icon to show and which tier accent color to badge it with. Purely cosmetic -
-// falls back to a generic look for anything that doesn't parse, same spirit as the router's own
-// "approximate id beats dropping the swing" fallback.
+// Maps a GatheredItems.ItemId (usually "T{tier}_{CATEGORY}", optionally "_LEVEL{n}@{n}" for
+// enchanted resources - see GatheringEventRouter.ResolveItemId - occasionally a bare numeric
+// fallback when tier resolution failed) to display metadata for the UI: which category icon to
+// show, which tier accent color to badge it with, and the enchantment badge (color + name).
+// Purely cosmetic - falls back to a generic look for anything that doesn't parse, same spirit as
+// the router's own "approximate id beats dropping the swing" fallback.
 public static class ItemDisplay
 {
-    public static (int? Tier, string Category) Parse(string itemId)
+    private static readonly Regex EnchantmentSuffixPattern = new(@"_LEVEL\d+@(\d+)$", RegexOptions.Compiled);
+
+    public static (int? Tier, string Category, int EnchantmentLevel) Parse(string itemId)
     {
         var parts = itemId.Split('_', 2);
-        if (parts.Length == 2 && parts[0].Length > 1 && parts[0][0] == 'T' && int.TryParse(parts[0][1..], out var tier))
+        if (parts.Length != 2 || parts[0].Length <= 1 || parts[0][0] != 'T' || !int.TryParse(parts[0][1..], out var tier))
         {
-            return (tier, parts[1]);
+            return (null, itemId, 0);
         }
 
-        return (null, itemId);
+        var enchantMatch = EnchantmentSuffixPattern.Match(parts[1]);
+        if (!enchantMatch.Success)
+        {
+            return (tier, parts[1], 0);
+        }
+
+        var category = parts[1][..enchantMatch.Index];
+        return (tier, category, int.Parse(enchantMatch.Groups[1].Value));
     }
 
     public static string TierCssClass(int? tier) => tier switch
@@ -29,6 +41,27 @@ public static class ItemDisplay
         7 => "ac-tier-7",
         8 => "ac-tier-8",
         _ => "ac-tier-unknown",
+    };
+
+    // Names and colors confirmed against the Albion Online Wiki (wiki.albiononline.com/wiki/Enchanting):
+    // .1 green "Uncommon", .2 blue "Rare", .3 purple "Exceptional", .4 gold "Pristine". Reuses the
+    // same green/blue/purple/gold already established for T3/T4/T5/T7 tier badges for consistency.
+    public static string? EnchantmentLabel(int level) => level switch
+    {
+        1 => "Uncommon",
+        2 => "Rare",
+        3 => "Exceptional",
+        4 => "Pristine",
+        _ => null,
+    };
+
+    public static string EnchantmentCssClass(int level) => level switch
+    {
+        1 => "ac-enchant-1",
+        2 => "ac-enchant-2",
+        3 => "ac-enchant-3",
+        4 => "ac-enchant-4",
+        _ => "ac-enchant-0",
     };
 
     public static string[] CategoryIconPaths(string category) => category.ToUpperInvariant() switch

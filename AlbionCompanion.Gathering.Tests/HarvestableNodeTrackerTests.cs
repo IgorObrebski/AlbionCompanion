@@ -14,8 +14,16 @@ public class HarvestableNodeTrackerTests
         public void RaiseEvent(PhotonEvent photonEvent) => OnEventReceived?.Invoke(this, photonEvent);
     }
 
-    private static PhotonEvent NewHarvestableObject(int nodeId, int tier) =>
-        new(1, new Dictionary<byte, object?> { [0] = nodeId, [5] = 27, [7] = tier, [252] = (byte)40 });
+    private static PhotonEvent NewHarvestableObject(int nodeId, int tier, int? enchantmentLevel = null)
+    {
+        var parameters = new Dictionary<byte, object?> { [0] = nodeId, [5] = 27, [7] = tier, [252] = (byte)40 };
+        if (enchantmentLevel is { } level)
+        {
+            parameters[11] = level;
+        }
+
+        return new PhotonEvent(1, parameters);
+    }
 
     [Fact]
     public void NewHarvestableObjectEvent_RecordsTierForNodeId()
@@ -35,6 +43,7 @@ public class HarvestableNodeTrackerTests
         var tracker = new HarvestableNodeTracker(parser);
 
         Assert.Null(tracker.GetTier(999999));
+        Assert.Null(tracker.GetEnchantmentLevel(999999));
     }
 
     [Fact]
@@ -46,5 +55,27 @@ public class HarvestableNodeTrackerTests
         parser.RaiseEvent(new PhotonEvent(1, new Dictionary<byte, object?> { [0] = 2951, [252] = (byte)59 }));
 
         Assert.Null(tracker.GetTier(2951));
+    }
+
+    [Fact]
+    public void NewHarvestableObjectEvent_RecordsEnchantmentLevelForNodeId()
+    {
+        var parser = new FakePhotonParser();
+        var tracker = new HarvestableNodeTracker(parser);
+
+        parser.RaiseEvent(NewHarvestableObject(nodeId: 2462, tier: 5, enchantmentLevel: 2));
+
+        Assert.Equal(2, tracker.GetEnchantmentLevel(2462));
+    }
+
+    [Fact]
+    public void NewHarvestableObjectEvent_MissingEnchantmentParameter_DefaultsToZero()
+    {
+        var parser = new FakePhotonParser();
+        var tracker = new HarvestableNodeTracker(parser);
+
+        parser.RaiseEvent(NewHarvestableObject(nodeId: 2972, tier: 4));
+
+        Assert.Equal(0, tracker.GetEnchantmentLevel(2972));
     }
 }

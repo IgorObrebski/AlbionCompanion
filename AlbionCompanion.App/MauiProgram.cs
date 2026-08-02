@@ -26,6 +26,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<IGatheringLiveState, GatheringLiveState>();
         builder.Services.AddSingleton<ISessionHistoryService>(_ =>
             new SessionHistoryService(GatheringProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>()));
+        builder.Services.AddSingleton<IItemDictionaryService>(_ =>
+            GatheringProvider!.GetRequiredService<IItemDictionaryService>());
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();

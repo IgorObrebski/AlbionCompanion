@@ -35,6 +35,17 @@
     --ac-tier-unknown-bg: color-mix(in srgb, #e9e9ed 14%, transparent);
     --ac-tier-unknown-fg: var(--ac-text-muted);
 
+    /* Enchantment badge colors confirmed against wiki.albiononline.com/wiki/Enchanting - reuses
+       the same hues as the T3/T4/T5/T7 tier badges above for a consistent palette. */
+    --ac-enchant-1-bg: color-mix(in srgb, #4ade80 22%, transparent);
+    --ac-enchant-1-fg: #bbf7d0;
+    --ac-enchant-2-bg: color-mix(in srgb, #60a5fa 22%, transparent);
+    --ac-enchant-2-fg: #bfdbfe;
+    --ac-enchant-3-bg: color-mix(in srgb, #c084fc 22%, transparent);
+    --ac-enchant-3-fg: #e9d5ff;
+    --ac-enchant-4-bg: color-mix(in srgb, #eab308 22%, transparent);
+    --ac-enchant-4-fg: #fef08a;
+
     --ac-space-1: 4px;
     --ac-space-2: 8px;
     --ac-space-3: 12px;
@@ -267,6 +278,11 @@ html, body {
 .ac-tier-7 { background: var(--ac-tier-7-bg); color: var(--ac-tier-7-fg); }
 .ac-tier-8 { background: var(--ac-tier-8-bg); color: var(--ac-tier-8-fg); }
 .ac-tier-unknown { background: var(--ac-tier-unknown-bg); color: var(--ac-tier-unknown-fg); }
+
+.ac-enchant-1 { background: var(--ac-enchant-1-bg); color: var(--ac-enchant-1-fg); }
+.ac-enchant-2 { background: var(--ac-enchant-2-bg); color: var(--ac-enchant-2-fg); }
+.ac-enchant-3 { background: var(--ac-enchant-3-bg); color: var(--ac-enchant-3-fg); }
+.ac-enchant-4 { background: var(--ac-enchant-4-bg); color: var(--ac-enchant-4-fg); }
 
 .ac-tag-active { background: color-mix(in srgb, var(--ac-active) 20%, transparent); color: #86efac; }
 .ac-tag-ended { background: color-mix(in srgb, var(--ac-ended) 30%, transparent); color: var(--ac-text-muted); }

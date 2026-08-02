@@ -1,5 +1,11 @@
 @* Filterable/sortable/paginated table of gathered items. Client-side (item counts per session
-   are small - dozens of distinct tier/category combos at most, never worth a DB round trip). *@
+   are small - dozens of distinct tier/category/enchantment combos at most, never worth a DB round
+   trip). Display names are looked up in bulk from IItemDictionaryService (ao-bin-dumps items.json,
+   seeded at startup) instead of showing raw ids like "T4_ORE". *@
+@using AlbionCompanion.Core.Models
+@using AlbionCompanion.Gathering
+@inject IItemDictionaryService ItemDictionary
+
 <div style="display:flex; align-items:center; justify-content:space-between; gap: var(--ac-space-3); margin-bottom: var(--ac-space-3);">
     <div class="ac-section-label" style="margin-bottom:0;">@Title</div>
     <input class="ac-input" style="min-width:160px;" type="text" placeholder="Filter items..." value="@_filter" @oninput="OnFilterInput" />
@@ -20,13 +26,14 @@ else
             <tr>
                 <th><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Item)">Item @SortIndicator(SortColumn.Item)</button></th>
                 <th><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Tier)">Tier @SortIndicator(SortColumn.Tier)</button></th>
+                <th><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Enchantment)">Enchant @SortIndicator(SortColumn.Enchantment)</button></th>
                 <th class="ac-num"><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Amount)">Amount @SortIndicator(SortColumn.Amount)</button></th>
             </tr>
         </thead>
         <tbody>
             @foreach (var (itemId, amount) in rows.Skip((_page - 1) * PageSize).Take(PageSize))
             {
-                <ItemRow ItemId="@itemId" Amount="@amount" />
+                <ItemRow ItemId="@itemId" Amount="@amount" DisplayName="@ResolveDisplayName(itemId)" />
             }
         </tbody>
     </table>
@@ -43,7 +50,7 @@ else
 }
 
 @code {
-    private enum SortColumn { Item, Tier, Amount }
+    private enum SortColumn { Item, Tier, Enchantment, Amount }
 
     [Parameter, EditorRequired]
     public IReadOnlyDictionary<string, int> Items { get; set; } = new Dictionary<string, int>();
@@ -57,6 +64,24 @@ else
     private SortColumn _sortBy = SortColumn.Amount;
     private bool _sortDescending = true;
     private int _page = 1;
+    private IReadOnlyDictionary<string, ItemDictionary> _displayNames = new Dictionary<string, ItemDictionary>();
+    private IReadOnlyDictionary<string, int>? _lookedUpFor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Re-resolve only when the underlying item set actually changed (not on every re-render -
+        // Home's live table re-renders on every gathering event, most of which don't add a new item).
+        if (ReferenceEquals(_lookedUpFor, Items))
+        {
+            return;
+        }
+
+        _displayNames = await ItemDictionary.GetItemsByIdAsync(Items.Keys);
+        _lookedUpFor = Items;
+    }
+
+    private string ResolveDisplayName(string itemId) =>
+        _displayNames.TryGetValue(itemId, out var entry) ? entry.DisplayNameEN : itemId;
 
     private void OnFilterInput(ChangeEventArgs e)
     {
@@ -87,15 +112,20 @@ else
         IEnumerable<KeyValuePair<string, int>> query = Items;
         if (!string.IsNullOrWhiteSpace(_filter))
         {
-            query = query.Where(kv => kv.Key.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+            query = query.Where(kv =>
+                kv.Key.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
+                ResolveDisplayName(kv.Key).Contains(_filter, StringComparison.OrdinalIgnoreCase));
         }
 
         query = _sortBy switch
         {
-            SortColumn.Item => _sortDescending ? query.OrderByDescending(kv => kv.Key) : query.OrderBy(kv => kv.Key),
+            SortColumn.Item => _sortDescending ? query.OrderByDescending(kv => ResolveDisplayName(kv.Key)) : query.OrderBy(kv => ResolveDisplayName(kv.Key)),
             SortColumn.Tier => _sortDescending
                 ? query.OrderByDescending(kv => ItemDisplay.Parse(kv.Key).Tier ?? -1)
                 : query.OrderBy(kv => ItemDisplay.Parse(kv.Key).Tier ?? -1),
+            SortColumn.Enchantment => _sortDescending
+                ? query.OrderByDescending(kv => ItemDisplay.Parse(kv.Key).EnchantmentLevel)
+                : query.OrderBy(kv => ItemDisplay.Parse(kv.Key).EnchantmentLevel),
             _ => _sortDescending ? query.OrderByDescending(kv => kv.Value) : query.OrderBy(kv => kv.Value),
         };
 

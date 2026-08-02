@@ -39,7 +39,7 @@ public static class AppHostBuilder
         services.AddSingleton<ILocalPlayerTracker, LocalPlayerTracker>();
         services.AddSingleton<IHarvestableNodeTracker, HarvestableNodeTracker>();
         services.AddScoped<IGatheringSessionService, GatheringSessionService>();
-        services.AddScoped<IItemDictionaryService, ItemDictionaryService>();
+        services.AddSingleton<IItemDictionaryService, ItemDictionaryService>();
         services.AddScoped<ZoneTracker>();
         services.AddScoped<GatheringEventRouter>();
         services.AddScoped<IRawEventRecorder, RawEventRecorder>();

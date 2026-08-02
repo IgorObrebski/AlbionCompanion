@@ -25,10 +25,18 @@ public class GatheringEventRouterTests
     private sealed class FakeHarvestableNodeTracker : IHarvestableNodeTracker
     {
         private readonly Dictionary<int, int> _tierByNodeId;
+        private readonly Dictionary<int, int> _enchantmentLevelByNodeId;
 
-        public FakeHarvestableNodeTracker(Dictionary<int, int>? tierByNodeId = null) => _tierByNodeId = tierByNodeId ?? new Dictionary<int, int>();
+        public FakeHarvestableNodeTracker(Dictionary<int, int>? tierByNodeId = null, Dictionary<int, int>? enchantmentLevelByNodeId = null)
+        {
+            _tierByNodeId = tierByNodeId ?? new Dictionary<int, int>();
+            _enchantmentLevelByNodeId = enchantmentLevelByNodeId ?? new Dictionary<int, int>();
+        }
 
         public int? GetTier(int nodeId) => _tierByNodeId.TryGetValue(nodeId, out var tier) ? tier : null;
+
+        public int? GetEnchantmentLevel(int nodeId) =>
+            _enchantmentLevelByNodeId.TryGetValue(nodeId, out var level) ? level : null;
     }
 
     private static (GatheringSessionService Service, AppDbContext Context) CreateServiceWithOpenSession(SqliteConnection connection)
@@ -68,6 +76,49 @@ public class GatheringEventRouterTests
         var item = Assert.Single(context.GatheredItems);
         Assert.Equal("T4_ORE", item.ItemId);
         Assert.Equal(1, item.Amount);
+    }
+
+    [Fact]
+    public async Task HarvestStartEvent_WithEnchantedNode_AddsLevelSuffixedItemId()
+    {
+        // Confirmed via live capture on 2026-08-02, cross-referenced against the player's own
+        // manually-tallied gathering: matches ao-bin-dumps items.json's real UniqueName for
+        // enchanted resources (e.g. "T5_ORE_LEVEL2@2" = Rare Titanium Ore).
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateServiceWithOpenSession(connection);
+        await service.StartSessionAsync("4213");
+        var parser = new FakePhotonParser();
+        var localPlayer = new FakeLocalPlayerTracker { CurrentEntityId = LocalPlayerEntityId };
+        var nodeTracker = new FakeHarvestableNodeTracker(
+            tierByNodeId: new Dictionary<int, int> { [NodeId] = 5 },
+            enchantmentLevelByNodeId: new Dictionary<int, int> { [NodeId] = 2 });
+        var router = new GatheringEventRouter(parser, service, localPlayer, nodeTracker);
+
+        await router.HandleEventAsync(HarvestStart(actorEntityId: LocalPlayerEntityId, categoryCode: 27));
+
+        var item = Assert.Single(context.GatheredItems);
+        Assert.Equal("T5_ORE_LEVEL2@2", item.ItemId);
+    }
+
+    [Fact]
+    public async Task HarvestStartEvent_WithUnenchantedNode_AddsBareItemIdWithNoLevelSuffix()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateServiceWithOpenSession(connection);
+        await service.StartSessionAsync("4213");
+        var parser = new FakePhotonParser();
+        var localPlayer = new FakeLocalPlayerTracker { CurrentEntityId = LocalPlayerEntityId };
+        var nodeTracker = new FakeHarvestableNodeTracker(
+            tierByNodeId: new Dictionary<int, int> { [NodeId] = 4 },
+            enchantmentLevelByNodeId: new Dictionary<int, int> { [NodeId] = 0 });
+        var router = new GatheringEventRouter(parser, service, localPlayer, nodeTracker);
+
+        await router.HandleEventAsync(HarvestStart(actorEntityId: LocalPlayerEntityId, categoryCode: 27));
+
+        var item = Assert.Single(context.GatheredItems);
+        Assert.Equal("T4_ORE", item.ItemId);
     }
 
     [Fact]

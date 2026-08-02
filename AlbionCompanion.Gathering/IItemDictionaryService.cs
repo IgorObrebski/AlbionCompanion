@@ -6,5 +6,6 @@ public interface IItemDictionaryService
 {
     Task<IEnumerable<ItemDictionary>> SearchItemsAsync(string query);
     Task<ItemDictionary?> GetItemByIdAsync(string id);
+    Task<IReadOnlyDictionary<string, ItemDictionary>> GetItemsByIdAsync(IEnumerable<string> ids);
     Task SeedFromJsonAsync();
 }

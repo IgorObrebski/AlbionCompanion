@@ -175,15 +175,25 @@ public class GatheringEventRouter
     private string ResolveItemId(PhotonEvent photonEvent, int categoryCode)
     {
         var category = HarvestableCategory.FromTypeCode(categoryCode);
-        int? tier = photonEvent.Parameters.TryGetValue(HarvestNodeIdParameterKey, out var nodeIdValue) && nodeIdValue is not null
-            ? _nodeTracker.GetTier(Convert.ToInt32(nodeIdValue))
+        int? nodeId = photonEvent.Parameters.TryGetValue(HarvestNodeIdParameterKey, out var nodeIdValue) && nodeIdValue is not null
+            ? Convert.ToInt32(nodeIdValue)
             : null;
+        int? tier = nodeId is { } id ? _nodeTracker.GetTier(id) : null;
 
         // Fall back to the bare numeric category code if we can't resolve a full "T{tier}_{CATEGORY}"
         // id (e.g. the node's spawn broadcast was never captured, or the category code is out of
         // every known range) - an approximate item id beats silently dropping the swing.
-        return category is not null && tier is not null
-            ? $"T{tier}_{category}"
-            : categoryCode.ToString();
+        if (category is null || tier is null)
+        {
+            return categoryCode.ToString();
+        }
+
+        // Matches ao-bin-dumps items.json's real UniqueName convention for enchanted resources
+        // (e.g. "T4_ORE_LEVEL2@2" = Rare Iron Ore) - confirmed via live capture on 2026-08-02 (see
+        // HarvestableNodeTracker). Enchant level 0 (unenchanted) uses the bare id with no suffix.
+        var enchantmentLevel = nodeId is { } n ? _nodeTracker.GetEnchantmentLevel(n) ?? 0 : 0;
+        return enchantmentLevel > 0
+            ? $"T{tier}_{category}_LEVEL{enchantmentLevel}@{enchantmentLevel}"
+            : $"T{tier}_{category}";
     }
 }

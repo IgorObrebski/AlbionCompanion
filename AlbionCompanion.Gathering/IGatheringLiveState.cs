@@ -9,5 +9,5 @@ public interface IGatheringLiveState
 
     event EventHandler? OnChanged;
 
-    void Attach(IGatheringSessionService sessionService);
+    Task Attach(IGatheringSessionService sessionService);
 }

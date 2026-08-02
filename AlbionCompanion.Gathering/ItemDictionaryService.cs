@@ -22,18 +22,20 @@ public class ItemDictionaryService : IItemDictionaryService
 
     private static readonly Regex TierPrefixPattern = new(@"^T(\d+)_(.+)$", RegexOptions.Compiled);
 
-    private readonly AppDbContext _dbContext;
+    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly HttpClient _httpClient;
 
-    public ItemDictionaryService(AppDbContext dbContext, HttpClient httpClient)
+    public ItemDictionaryService(IDbContextFactory<AppDbContext> dbContextFactory, HttpClient httpClient)
     {
-        _dbContext = dbContext;
+        _dbContextFactory = dbContextFactory;
         _httpClient = httpClient;
     }
 
     public async Task SeedFromJsonAsync()
     {
-        if (await _dbContext.ItemDictionaries.AnyAsync())
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+
+        if (await dbContext.ItemDictionaries.AnyAsync())
         {
             return;
         }
@@ -49,7 +51,7 @@ public class ItemDictionaryService : IItemDictionaryService
 
             var (tier, group) = ParseTierAndGroup(entry.UniqueName);
 
-            _dbContext.ItemDictionaries.Add(new ItemDictionary
+            dbContext.ItemDictionaries.Add(new ItemDictionary
             {
                 UniqueName = entry.UniqueName,
                 DisplayNamePL = entry.LocalizedNames?.GetValueOrDefault("PL-PL") ?? entry.UniqueName,
@@ -59,17 +61,34 @@ public class ItemDictionaryService : IItemDictionaryService
             });
         }
 
-        await _dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync();
     }
 
-    public Task<ItemDictionary?> GetItemByIdAsync(string id) =>
-        _dbContext.ItemDictionaries.FirstOrDefaultAsync(item => item.UniqueName == id);
+    public async Task<ItemDictionary?> GetItemByIdAsync(string id)
+    {
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        return await dbContext.ItemDictionaries.FirstOrDefaultAsync(item => item.UniqueName == id);
+    }
+
+    public async Task<IReadOnlyDictionary<string, ItemDictionary>> GetItemsByIdAsync(IEnumerable<string> ids)
+    {
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+
+        var idList = ids.Distinct().ToList();
+        var entries = await dbContext.ItemDictionaries
+            .Where(item => idList.Contains(item.UniqueName))
+            .ToListAsync();
+
+        return entries.ToDictionary(item => item.UniqueName);
+    }
 
     public async Task<IEnumerable<ItemDictionary>> SearchItemsAsync(string query)
     {
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+
         var pattern = $"%{query.Trim()}%";
 
-        return await _dbContext.ItemDictionaries
+        return await dbContext.ItemDictionaries
             .Where(item =>
                 EF.Functions.Like(item.DisplayNamePL, pattern) ||
                 EF.Functions.Like(item.DisplayNameEN, pattern) ||
