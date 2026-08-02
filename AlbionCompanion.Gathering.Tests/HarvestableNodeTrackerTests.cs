@@ -44,6 +44,20 @@ public class HarvestableNodeTrackerTests
 
         Assert.Null(tracker.GetTier(999999));
         Assert.Null(tracker.GetEnchantmentLevel(999999));
+        Assert.Null(tracker.GetCategoryCode(999999));
+    }
+
+    [Fact]
+    public void NewHarvestableObjectEvent_RecordsCategoryCodeForNodeId()
+    {
+        // Needed because HarvestFinished (unlike HarvestStart) carries no category code at all -
+        // GatheringEventRouter.ResolveItemId resolves it entirely through this tracker.
+        var parser = new FakePhotonParser();
+        var tracker = new HarvestableNodeTracker(parser);
+
+        parser.RaiseEvent(NewHarvestableObject(nodeId: 2951, tier: 4));
+
+        Assert.Equal(27, tracker.GetCategoryCode(2951));
     }
 
     [Fact]
