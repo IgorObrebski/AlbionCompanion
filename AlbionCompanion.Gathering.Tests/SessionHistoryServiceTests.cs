@@ -172,9 +172,34 @@ public class SessionHistoryServiceTests
         var result = await service.GetSessionDetailAsync(session.Id);
 
         Assert.NotNull(result);
-        Assert.Equal(7, result!.ItemTotals["T4_ORE"]);
+        var total = Assert.Single(result!.ItemTotals);
+        Assert.Equal("T4_ORE", total.ItemId);
+        Assert.Equal(7, total.Amount);
         Assert.Equal(300, result.TotalFameEarned);
         Assert.Equal("Martlock", result.StartLocation);
+    }
+
+    [Fact]
+    public async Task GetSessionDetailAsync_SameItemDifferentLocations_TrackedSeparately()
+    {
+        // A session can roam through multiple zones without ending (see the 2026-08-02 roaming
+        // fix) - the same item gathered in two locations must stay as two distinct totals.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection);
+        var session = new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "Cairn Camain", EndTime = DateTime.UtcNow };
+        context.GatheringSessions.Add(session);
+        await context.SaveChangesAsync();
+        context.GatheredItems.Add(new GatheredItem { SessionId = session.Id, ItemId = "T4_ORE", Amount = 5, Location = "Cairn Camain", Timestamp = DateTime.UtcNow });
+        context.GatheredItems.Add(new GatheredItem { SessionId = session.Id, ItemId = "T4_ORE", Amount = 3, Location = "Mawar Gorge", Timestamp = DateTime.UtcNow });
+        await context.SaveChangesAsync();
+
+        var result = await service.GetSessionDetailAsync(session.Id);
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.ItemTotals.Count);
+        Assert.Equal(5, result.ItemTotals.Single(t => t.Location == "Cairn Camain").Amount);
+        Assert.Equal(3, result.ItemTotals.Single(t => t.Location == "Mawar Gorge").Amount);
     }
 
     [Fact]

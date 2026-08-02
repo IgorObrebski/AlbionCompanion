@@ -31,9 +31,9 @@ public class GatheringSessionService : IGatheringSessionService
 
         var itemTotals = await _dbContext.GatheredItems
             .Where(item => item.SessionId == session.Id)
-            .GroupBy(item => item.ItemId)
-            .Select(g => new { g.Key, Total = g.Sum(item => item.Amount) })
-            .ToDictionaryAsync(x => x.Key, x => x.Total);
+            .GroupBy(item => new { item.ItemId, item.Location })
+            .Select(g => new ItemLocationTotal(g.Key.ItemId, g.Key.Location, g.Sum(item => item.Amount)))
+            .ToListAsync();
 
         return new ActiveSessionSnapshot(session.CurrentLocation, session.TotalFameEarned, itemTotals);
     }
@@ -112,6 +112,7 @@ public class GatheringSessionService : IGatheringSessionService
             SessionId = session.Id,
             ItemId = itemId,
             Amount = amount,
+            Location = session.CurrentLocation,
             Timestamp = DateTime.UtcNow,
         };
         _dbContext.GatheredItems.Add(item);

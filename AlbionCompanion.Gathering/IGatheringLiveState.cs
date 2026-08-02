@@ -5,7 +5,7 @@ public interface IGatheringLiveState
     bool IsActive { get; }
     string? StartLocation { get; }
     int TotalFame { get; }
-    IReadOnlyDictionary<string, int> ItemTotals { get; }
+    IReadOnlyList<ItemLocationTotal> ItemTotals { get; }
 
     event EventHandler? OnChanged;
 

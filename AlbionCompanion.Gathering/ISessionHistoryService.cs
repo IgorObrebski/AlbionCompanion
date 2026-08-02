@@ -40,4 +40,4 @@ public record SessionDetail(
     DateTime EndTime,
     string StartLocation,
     int TotalFameEarned,
-    IReadOnlyDictionary<string, int> ItemTotals);
+    IReadOnlyList<ItemLocationTotal> ItemTotals);

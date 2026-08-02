@@ -1,14 +1,16 @@
 @* Filterable/sortable/paginated table of gathered items. Client-side (item counts per session
-   are small - dozens of distinct tier/category/enchantment combos at most, never worth a DB round
-   trip). Display names are looked up in bulk from IItemDictionaryService (ao-bin-dumps items.json,
-   seeded at startup) instead of showing raw ids like "T4_ORE". *@
+   are small - dozens of distinct tier/category/enchantment/location combos at most, never worth a
+   DB round trip). Display names are looked up in bulk from IItemDictionaryService (ao-bin-dumps
+   items.json, seeded at startup) instead of showing raw ids like "T4_ORE". Each row is one
+   (item, location) total - a session can roam through multiple zones without ending, so the same
+   item gathered in two places stays as two distinct rows rather than merging. *@
 @using AlbionCompanion.Core.Models
 @using AlbionCompanion.Gathering
 @inject IItemDictionaryService ItemDictionary
 
 <div style="display:flex; align-items:center; justify-content:space-between; gap: var(--ac-space-3); margin-bottom: var(--ac-space-3);">
     <div class="ac-section-label" style="margin-bottom:0;">@Title</div>
-    <input class="ac-input" style="min-width:160px;" type="text" placeholder="Filter items..." value="@_filter" @oninput="OnFilterInput" />
+    <input class="ac-input" style="min-width:160px;" type="text" placeholder="Filter items or locations..." value="@_filter" @oninput="OnFilterInput" />
 </div>
 
 @{
@@ -27,45 +29,50 @@ else
                 <th><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Item)">Item @SortIndicator(SortColumn.Item)</button></th>
                 <th><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Tier)">Tier @SortIndicator(SortColumn.Tier)</button></th>
                 <th><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Enchantment)">Enchant @SortIndicator(SortColumn.Enchantment)</button></th>
+                <th><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Location)">Location @SortIndicator(SortColumn.Location)</button></th>
                 <th class="ac-num"><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Amount)">Amount @SortIndicator(SortColumn.Amount)</button></th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var (itemId, amount) in rows.Skip((_page - 1) * PageSize).Take(PageSize))
+            @foreach (var total in rows.Skip((_page - 1) * _pageSize).Take(_pageSize))
             {
-                <ItemRow ItemId="@itemId" Amount="@amount" DisplayName="@ResolveDisplayName(itemId)" />
+                <ItemRow ItemId="@total.ItemId" Amount="@total.Amount" Location="@total.Location" DisplayName="@ResolveDisplayName(total.ItemId)" />
             }
         </tbody>
     </table>
 
-    var totalPages = Math.Max(1, (int)Math.Ceiling(rows.Count / (double)PageSize));
-    @if (totalPages > 1)
-    {
-        <div class="ac-pager">
-            <button class="ac-pager-btn" disabled="@(_page <= 1)" @onclick="() => _page--">Prev</button>
-            <span class="ac-subtitle" style="margin:0;">Page @_page of @totalPages</span>
-            <button class="ac-pager-btn" disabled="@(_page >= totalPages)" @onclick="() => _page++">Next</button>
-        </div>
-    }
+    var totalPages = Math.Max(1, (int)Math.Ceiling(rows.Count / (double)_pageSize));
+    <div class="ac-pager">
+        <button class="ac-pager-btn" disabled="@(_page <= 1)" @onclick="() => _page--">Prev</button>
+        <span class="ac-subtitle" style="margin:0;">Page @_page of @totalPages</span>
+        <button class="ac-pager-btn" disabled="@(_page >= totalPages)" @onclick="() => _page++">Next</button>
+        <select class="ac-select" value="@_pageSize" @onchange="OnPageSizeChanged">
+            @foreach (var size in PageSizeOptions)
+            {
+                <option value="@size">@size / page</option>
+            }
+        </select>
+    </div>
 }
 
 @code {
-    private enum SortColumn { Item, Tier, Enchantment, Amount }
+    private enum SortColumn { Item, Tier, Enchantment, Location, Amount }
 
     [Parameter, EditorRequired]
-    public IReadOnlyDictionary<string, int> Items { get; set; } = new Dictionary<string, int>();
+    public IReadOnlyList<ItemLocationTotal> Items { get; set; } = Array.Empty<ItemLocationTotal>();
 
     [Parameter]
     public string Title { get; set; } = "Items";
 
-    private const int PageSize = 15;
+    private static readonly int[] PageSizeOptions = [10, 25, 50, 100];
 
     private string _filter = string.Empty;
+    private int _pageSize = 10;
     private SortColumn _sortBy = SortColumn.Amount;
     private bool _sortDescending = true;
     private int _page = 1;
     private IReadOnlyDictionary<string, ItemDictionary> _displayNames = new Dictionary<string, ItemDictionary>();
-    private IReadOnlyDictionary<string, int>? _lookedUpFor;
+    private IReadOnlyList<ItemLocationTotal>? _lookedUpFor;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -76,7 +83,7 @@ else
             return;
         }
 
-        _displayNames = await ItemDictionary.GetItemsByIdAsync(Items.Keys);
+        _displayNames = await ItemDictionary.GetItemsByIdAsync(Items.Select(t => t.ItemId).Distinct());
         _lookedUpFor = Items;
     }
 
@@ -86,6 +93,12 @@ else
     private void OnFilterInput(ChangeEventArgs e)
     {
         _filter = e.Value?.ToString() ?? string.Empty;
+        _page = 1;
+    }
+
+    private void OnPageSizeChanged(ChangeEventArgs e)
+    {
+        _pageSize = int.TryParse(e.Value?.ToString(), out var size) ? size : 10;
         _page = 1;
     }
 
@@ -107,32 +120,34 @@ else
     private string SortIndicator(SortColumn column) =>
         _sortBy != column ? "" : _sortDescending ? "▾" : "▴";
 
-    private List<KeyValuePair<string, int>> FilteredSorted()
+    private List<ItemLocationTotal> FilteredSorted()
     {
-        IEnumerable<KeyValuePair<string, int>> query = Items;
+        IEnumerable<ItemLocationTotal> query = Items;
         if (!string.IsNullOrWhiteSpace(_filter))
         {
-            query = query.Where(kv =>
-                kv.Key.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
-                ResolveDisplayName(kv.Key).Contains(_filter, StringComparison.OrdinalIgnoreCase));
+            query = query.Where(t =>
+                t.ItemId.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
+                t.Location.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
+                ResolveDisplayName(t.ItemId).Contains(_filter, StringComparison.OrdinalIgnoreCase));
         }
 
         query = _sortBy switch
         {
-            SortColumn.Item => _sortDescending ? query.OrderByDescending(kv => ResolveDisplayName(kv.Key)) : query.OrderBy(kv => ResolveDisplayName(kv.Key)),
+            SortColumn.Item => _sortDescending ? query.OrderByDescending(t => ResolveDisplayName(t.ItemId)) : query.OrderBy(t => ResolveDisplayName(t.ItemId)),
             SortColumn.Tier => _sortDescending
-                ? query.OrderByDescending(kv => ItemDisplay.Parse(kv.Key).Tier ?? -1)
-                : query.OrderBy(kv => ItemDisplay.Parse(kv.Key).Tier ?? -1),
+                ? query.OrderByDescending(t => ItemDisplay.Parse(t.ItemId).Tier ?? -1)
+                : query.OrderBy(t => ItemDisplay.Parse(t.ItemId).Tier ?? -1),
             SortColumn.Enchantment => _sortDescending
-                ? query.OrderByDescending(kv => ItemDisplay.Parse(kv.Key).EnchantmentLevel)
-                : query.OrderBy(kv => ItemDisplay.Parse(kv.Key).EnchantmentLevel),
-            _ => _sortDescending ? query.OrderByDescending(kv => kv.Value) : query.OrderBy(kv => kv.Value),
+                ? query.OrderByDescending(t => ItemDisplay.Parse(t.ItemId).EnchantmentLevel)
+                : query.OrderBy(t => ItemDisplay.Parse(t.ItemId).EnchantmentLevel),
+            SortColumn.Location => _sortDescending ? query.OrderByDescending(t => t.Location) : query.OrderBy(t => t.Location),
+            _ => _sortDescending ? query.OrderByDescending(t => t.Amount) : query.OrderBy(t => t.Amount),
         };
 
         var list = query.ToList();
 
         // Guard against the page going stale after a filter shrinks the result set out from under it.
-        var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (double)PageSize));
+        var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (double)_pageSize));
         if (_page > totalPages)
         {
             _page = totalPages;

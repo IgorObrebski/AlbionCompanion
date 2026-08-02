@@ -21,4 +21,9 @@ public interface IGatheringSessionService
 // (e.g. the app was closed and relaunched while still standing in open world - the session row
 // survived in the DB, per StartSessionAsync's roaming behavior, but nothing re-fires
 // OnSessionStarted for a session that already existed before this process started).
-public record ActiveSessionSnapshot(string CurrentLocation, int TotalFameEarned, IReadOnlyDictionary<string, int> ItemTotals);
+public record ActiveSessionSnapshot(string CurrentLocation, int TotalFameEarned, IReadOnlyList<ItemLocationTotal> ItemTotals);
+
+// One (item, location) bucket's summed amount within a session - a session can roam through
+// multiple zones without ending (see the 2026-08-02 roaming fix), so "what did I gather" needs a
+// location dimension alongside the item id, not just a flat per-item total.
+public record ItemLocationTotal(string ItemId, string Location, int Amount);

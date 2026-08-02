@@ -1,8 +1,10 @@
 @* Renders one <tr> for a gathered-item row (icon + display name, tier badge, enchantment badge,
-   right-aligned amount). Shared by Home's live table and SessionDetail's historical table so the
-   two never drift apart. Different enchantment levels of the same resource are already separate
-   ItemId values (e.g. "T4_ORE" vs "T4_ORE_LEVEL2@2" - see GatheringEventRouter.ResolveItemId), so
-   each renders as its own row naturally without any extra grouping logic here. *@
+   location, right-aligned amount). Shared by Home's live table and SessionDetail's historical
+   table so the two never drift apart. Different enchantment levels of the same resource are
+   already separate ItemId values (e.g. "T4_ORE" vs "T4_ORE_LEVEL2@2" - see
+   GatheringEventRouter.ResolveItemId), so each renders as its own row naturally without any extra
+   grouping logic here - same for the same item gathered in two different locations within one
+   roaming session (see ItemLocationTotal). *@
 <tr class="@CssClass">
     <td class="ac-item-cell">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac-text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -25,6 +27,7 @@
             <span class="ac-tag @ItemDisplay.EnchantmentCssClass(EnchantmentLevel)">@label</span>
         }
     </td>
+    <td class="text-muted">@Location</td>
     <td class="ac-num">@Amount</td>
 </tr>
 
@@ -34,6 +37,9 @@
 
     [Parameter]
     public int Amount { get; set; }
+
+    [Parameter]
+    public string Location { get; set; } = string.Empty;
 
     [Parameter]
     public string? DisplayName { get; set; }

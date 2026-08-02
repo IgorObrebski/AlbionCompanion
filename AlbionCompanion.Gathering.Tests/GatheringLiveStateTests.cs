@@ -26,6 +26,9 @@ public class GatheringLiveStateTests
         public void RaiseFameAdded(FameLog fameLog) => OnFameAdded?.Invoke(this, fameLog);
     }
 
+    private static int AmountFor(IGatheringLiveState liveState, string itemId, string location = "") =>
+        liveState.ItemTotals.Single(t => t.ItemId == itemId && t.Location == location).Amount;
+
     [Fact]
     public async Task OnItemAdded_NewItem_AppearsInItemTotals()
     {
@@ -35,7 +38,7 @@ public class GatheringLiveStateTests
 
         service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 5 });
 
-        Assert.Equal(5, liveState.ItemTotals["T4_ORE"]);
+        Assert.Equal(5, AmountFor(liveState, "T4_ORE"));
     }
 
     [Fact]
@@ -48,7 +51,23 @@ public class GatheringLiveStateTests
         service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 5 });
         service.RaiseItemAdded(new AlbionCompanion.Core.Models.GatheredItem { ItemId = "T4_ORE", Amount = 3 });
 
-        Assert.Equal(8, liveState.ItemTotals["T4_ORE"]);
+        Assert.Equal(8, AmountFor(liveState, "T4_ORE"));
+    }
+
+    [Fact]
+    public async Task OnItemAdded_SameItemDifferentLocation_TrackedSeparately()
+    {
+        // A session can roam through multiple zones without ending - the same item gathered in
+        // two different locations must stay as two separate totals, not merge into one.
+        var liveState = new GatheringLiveState();
+        var service = new FakeGatheringSessionService();
+        await liveState.Attach(service);
+
+        service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 5, Location = "Cairn Camain" });
+        service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 3, Location = "Mawar Gorge" });
+
+        Assert.Equal(5, AmountFor(liveState, "T4_ORE", "Cairn Camain"));
+        Assert.Equal(3, AmountFor(liveState, "T4_ORE", "Mawar Gorge"));
     }
 
     [Fact]
@@ -94,7 +113,7 @@ public class GatheringLiveStateTests
         service.RaiseSessionEnded(new GatheringSession { StartLocation = "Martlock" });
 
         Assert.False(liveState.IsActive);
-        Assert.Equal(5, liveState.ItemTotals["T4_ORE"]);
+        Assert.Equal(5, AmountFor(liveState, "T4_ORE"));
         Assert.Equal(300, liveState.TotalFame);
         Assert.Equal("Martlock", liveState.StartLocation);
     }
@@ -131,7 +150,7 @@ public class GatheringLiveStateTests
             SnapshotToReturn = new ActiveSessionSnapshot(
                 CurrentLocation: "Cairn Camain",
                 TotalFameEarned: 150,
-                ItemTotals: new Dictionary<string, int> { ["T4_ORE"] = 12 }),
+                ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) }),
         };
 
         await liveState.Attach(service);
@@ -139,7 +158,7 @@ public class GatheringLiveStateTests
         Assert.True(liveState.IsActive);
         Assert.Equal("Cairn Camain", liveState.StartLocation);
         Assert.Equal(150, liveState.TotalFame);
-        Assert.Equal(12, liveState.ItemTotals["T4_ORE"]);
+        Assert.Equal(12, AmountFor(liveState, "T4_ORE", "Cairn Camain"));
     }
 
     [Fact]
@@ -165,14 +184,14 @@ public class GatheringLiveStateTests
             SnapshotToReturn = new ActiveSessionSnapshot(
                 CurrentLocation: "Cairn Camain",
                 TotalFameEarned: 150,
-                ItemTotals: new Dictionary<string, int> { ["T4_ORE"] = 12 }),
+                ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) }),
         };
 
         await liveState.Attach(service);
-        service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 1 });
+        service.RaiseItemAdded(new GatheredItem { ItemId = "T4_ORE", Amount = 1, Location = "Cairn Camain" });
         service.RaiseFameAdded(new FameLog { FameType = "Gathering", Amount = 15 });
 
-        Assert.Equal(13, liveState.ItemTotals["T4_ORE"]);
+        Assert.Equal(13, AmountFor(liveState, "T4_ORE", "Cairn Camain"));
         Assert.Equal(165, liveState.TotalFame);
     }
 }

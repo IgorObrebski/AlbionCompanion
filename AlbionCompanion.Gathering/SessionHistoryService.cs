@@ -76,8 +76,9 @@ public class SessionHistoryService : ISessionHistoryService
         }
 
         var itemTotals = session.GatheredItems
-            .GroupBy(i => i.ItemId)
-            .ToDictionary(g => g.Key, g => g.Sum(i => i.Amount));
+            .GroupBy(i => new { i.ItemId, i.Location })
+            .Select(g => new ItemLocationTotal(g.Key.ItemId, g.Key.Location, g.Sum(i => i.Amount)))
+            .ToList();
 
         return new SessionDetail(
             session.Id,

@@ -8,7 +8,7 @@ public class GatheringLiveState : IGatheringLiveState
     // rather than the live dictionary, so a UI-thread enumeration can never race a capture-thread
     // mutation (Dictionary<> itself does not support concurrent read/write).
     private readonly object _lock = new();
-    private readonly Dictionary<string, int> _itemTotals = new();
+    private readonly Dictionary<(string ItemId, string Location), int> _itemTotals = new();
 
     private bool _isActive;
     private string? _startLocation;
@@ -29,9 +29,15 @@ public class GatheringLiveState : IGatheringLiveState
         get { lock (_lock) { return _totalFame; } }
     }
 
-    public IReadOnlyDictionary<string, int> ItemTotals
+    public IReadOnlyList<ItemLocationTotal> ItemTotals
     {
-        get { lock (_lock) { return new Dictionary<string, int>(_itemTotals); } }
+        get
+        {
+            lock (_lock)
+            {
+                return _itemTotals.Select(kv => new ItemLocationTotal(kv.Key.ItemId, kv.Key.Location, kv.Value)).ToList();
+            }
+        }
     }
 
     public event EventHandler? OnChanged;
@@ -54,9 +60,9 @@ public class GatheringLiveState : IGatheringLiveState
                 _isActive = true;
                 _startLocation = snapshot.CurrentLocation;
                 _totalFame = snapshot.TotalFameEarned;
-                foreach (var (itemId, amount) in snapshot.ItemTotals)
+                foreach (var total in snapshot.ItemTotals)
                 {
-                    _itemTotals[itemId] = amount;
+                    _itemTotals[(total.ItemId, total.Location)] = total.Amount;
                 }
             }
 
@@ -84,11 +90,11 @@ public class GatheringLiveState : IGatheringLiveState
 
         sessionService.OnItemAdded += (_, item) => Safely(() =>
         {
-            var itemId = item.ItemId;
+            var key = (item.ItemId, item.Location);
             var amount = item.Amount;
             lock (_lock)
             {
-                _itemTotals[itemId] = _itemTotals.GetValueOrDefault(itemId) + amount;
+                _itemTotals[key] = _itemTotals.GetValueOrDefault(key) + amount;
             }
         });
 

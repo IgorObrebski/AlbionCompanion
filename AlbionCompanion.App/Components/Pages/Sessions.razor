@@ -57,19 +57,23 @@ else
         </tbody>
     </table>
 
-    @if (_page.TotalPages > 1)
-    {
-        <div class="ac-pager">
-            <button class="ac-pager-btn" disabled="@(_page.Page <= 1)" @onclick="() => GoToPage(_page.Page - 1)">Prev</button>
-            <span class="ac-subtitle" style="margin:0;">Page @_page.Page of @_page.TotalPages</span>
-            <button class="ac-pager-btn" disabled="@(_page.Page >= _page.TotalPages)" @onclick="() => GoToPage(_page.Page + 1)">Next</button>
-        </div>
-    }
+    <div class="ac-pager">
+        <button class="ac-pager-btn" disabled="@(_page.Page <= 1)" @onclick="() => GoToPage(_page.Page - 1)">Prev</button>
+        <span class="ac-subtitle" style="margin:0;">Page @_page.Page of @_page.TotalPages</span>
+        <button class="ac-pager-btn" disabled="@(_page.Page >= _page.TotalPages)" @onclick="() => GoToPage(_page.Page + 1)">Next</button>
+        <select class="ac-select" value="@_pageSize" @onchange="OnPageSizeChanged">
+            @foreach (var size in PageSizeOptions)
+            {
+                <option value="@size">@size / page</option>
+            }
+        </select>
+    </div>
 }
 
 @code {
-    private const int PageSize = 20;
+    private static readonly int[] PageSizeOptions = [10, 25, 50, 100];
 
+    private int _pageSize = 10;
     private PagedResult<SessionSummary>? _page;
     private bool _loadFailed;
     private string _locationFilter = string.Empty;
@@ -89,7 +93,7 @@ else
         {
             _page = await HistoryService.GetCompletedSessionsAsync(new SessionQuery(
                 Page: _currentPage,
-                PageSize: PageSize,
+                PageSize: _pageSize,
                 LocationFilter: _locationFilter,
                 SortBy: _sortBy,
                 SortDescending: _sortDescending));
@@ -145,6 +149,13 @@ else
     private async Task GoToPage(int page)
     {
         _currentPage = page;
+        await LoadAsync();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        _pageSize = int.TryParse(e.Value?.ToString(), out var size) ? size : 10;
+        _currentPage = 1;
         await LoadAsync();
     }
 

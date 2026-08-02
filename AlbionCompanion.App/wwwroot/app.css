@@ -383,6 +383,17 @@ h1, h2, h3, h4, h5, h6 {
     cursor: default;
 }
 
+.ac-select {
+    background: var(--ac-surface-raised);
+    border: 1px solid var(--ac-divider);
+    border-radius: var(--ac-radius-sm);
+    color: var(--ac-text);
+    padding: var(--ac-space-1) var(--ac-space-2);
+    font-size: 13px;
+    font-family: inherit;
+    margin-left: auto;
+}
+
 a, .btn-link {
     color: #006bb7;
 }
