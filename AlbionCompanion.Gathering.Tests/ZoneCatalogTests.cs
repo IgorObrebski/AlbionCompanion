@@ -68,4 +68,41 @@ public class ZoneCatalogTests
 
         Assert.Equal(1, handler.RequestCount);
     }
+
+    private sealed class StaticZonesHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            // Regression: confirmed via live capture on 2026-08-02 - zone 4208 "Mawar Gorge" is a
+            // real, gatherable royal-continent open-world zone (same WRL world-zone file naming as
+            // 4213 "Cairn Camain") whose type is bare "SAFEAREA" (no PLAYERCITY prefix) because it
+            // happens to be PvP-safe for bordering a city. IsCityOrSafeAreaAsync used to match any
+            // "SAFEAREA"-prefixed type, wrongly treating it as a city sub-area (like the bank/market
+            // zones 4001/4002) and silently refusing to start a gathering session there.
+            var json = "{"
+                + "\"4208\":{\"name\":\"Mawar Gorge\",\"type\":\"SAFEAREA\"},"
+                + "\"4001\":{\"name\":\"Bank of Fort Sterling\",\"type\":\"PLAYERCITY_SAFEAREA_NOFURNITURE\"}"
+                + "}";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            });
+        }
+    }
+
+    [Fact]
+    public async Task IsCityOrSafeAreaAsync_BareSafeAreaType_IsNotTreatedAsCity()
+    {
+        var catalog = new ZoneCatalog(new HttpClient(new StaticZonesHandler()));
+
+        Assert.False(await catalog.IsCityOrSafeAreaAsync(4208));
+    }
+
+    [Fact]
+    public async Task IsCityOrSafeAreaAsync_PlayerCitySafeAreaType_IsTreatedAsCity()
+    {
+        var catalog = new ZoneCatalog(new HttpClient(new StaticZonesHandler()));
+
+        Assert.True(await catalog.IsCityOrSafeAreaAsync(4001));
+    }
 }

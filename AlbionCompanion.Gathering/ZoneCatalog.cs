@@ -15,7 +15,14 @@ public class ZoneCatalog : IZoneCatalog
     private const string ZonesJsonUrl =
         "https://raw.githubusercontent.com/Nouuu/Albion-Online-OpenRadar/main/web/ao-bin-dumps/zones.json";
 
-    private static readonly string[] SafeZoneTypePrefixes = { "PLAYERCITY", "SAFEAREA", "STARTINGCITY", "TUTORIAL" };
+    // Bare "SAFEAREA" (no PLAYERCITY prefix) is NOT a city/bank/market sub-area - confirmed via
+    // live capture on 2026-08-02: zone 4208 "Mawar Gorge" (file 4208_WRL_MN_AUTO_T4_UND_ROY, same
+    // WRL world-zone naming as gatherable zone 4213 "Cairn Camain") has type exactly "SAFEAREA".
+    // It's a real, gatherable royal-continent open-world zone that just happens to be PvP-safe
+    // because it borders a city - unrelated to a city's own PLAYERCITY_SAFEAREA_* sub-zones
+    // (bank/market). Matching on bare "SAFEAREA" wrongly treated every one of these zones as a
+    // city area and silently refused to start a gathering session in them.
+    private static readonly string[] SafeZoneTypePrefixes = { "PLAYERCITY", "STARTINGCITY", "TUTORIAL" };
 
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _loadLock = new(1, 1);
