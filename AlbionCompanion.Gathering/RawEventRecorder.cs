@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AlbionCompanion.Core.Data;
 using AlbionCompanion.Core.Models;
+using AlbionCompanion.Sniffer.AlbionEvents;
 using AlbionCompanion.Sniffer.Protocol16;
 using Microsoft.EntityFrameworkCore;
 
@@ -43,12 +44,14 @@ public class RawEventRecorder : IRawEventRecorder
             await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
 
             var session = await dbContext.GatheringSessions.SingleOrDefaultAsync(s => s.EndTime == null);
+            var semanticEventCode = TryGetSemanticEventCode(photonEvent);
 
             dbContext.RawGatheringEvents.Add(new RawGatheringEvent
             {
                 SessionId = session?.Id,
                 PhotonCode = photonEvent.Code,
-                SemanticEventCode = TryGetSemanticEventCode(photonEvent),
+                SemanticEventCode = semanticEventCode,
+                EventName = ResolveEventName(semanticEventCode),
                 ParametersJson = JsonSerializer.Serialize(photonEvent.Parameters.ToDictionary(p => p.Key.ToString(), p => p.Value)),
                 Timestamp = DateTime.UtcNow,
             });
@@ -60,6 +63,15 @@ public class RawEventRecorder : IRawEventRecorder
             OnRecordFailure?.Invoke(this, ex);
         }
     }
+
+    // Only covers the handful of codes AlbionEventCode has confirmed against real captures (see
+    // that enum's own header comment) - most codes seen on the wire simply aren't in it yet, so
+    // this returns null for those rather than guessing. Extend AlbionEventCode, not this method,
+    // as more codes get confirmed.
+    private static string? ResolveEventName(byte? semanticEventCode) =>
+        semanticEventCode is { } code && Enum.IsDefined(typeof(AlbionEventCode), code)
+            ? ((AlbionEventCode)code).ToString()
+            : null;
 
     private static byte? TryGetSemanticEventCode(PhotonEvent photonEvent)
     {

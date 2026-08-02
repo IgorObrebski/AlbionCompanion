@@ -12,10 +12,12 @@ namespace AlbionCompanion.Gathering;
 // name instead of staying an opaque game-internal id.
 //
 // The real items.json (checked 2026-07-16, ~12k entries) does NOT have explicit "Tier" or
-// "ShopCategory" fields as originally assumed in the spec - only LocalizedNames and UniqueName.
-// Tier and ItemGroup are derived from the UniqueName's "T{tier}_{REST}" convention instead
+// "ShopCategory" fields as originally assumed in the spec - only LocalizedNames, UniqueName, and
+// Index. Tier and ItemGroup are derived from the UniqueName's "T{tier}_{REST}" convention instead
 // (e.g. "T4_ORE" -> tier=4, group="ORE"); items that don't follow it (most equipment, e.g.
-// "MAIN_SWORD") get Tier=0 and ItemGroup=the full UniqueName.
+// "MAIN_SWORD") get Tier=0 and ItemGroup=the full UniqueName. Index (confirmed 2026-08-02, unique
+// per entry, no gaps in a ~12k sample) is used to resolve GatheringEventRouter's HarvestFinished
+// events directly - see ItemDictionary.cs.
 public class ItemDictionaryService : IItemDictionaryService
 {
     private const string ItemsJsonUrl = "https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/items.json";
@@ -58,6 +60,7 @@ public class ItemDictionaryService : IItemDictionaryService
                 DisplayNameEN = entry.LocalizedNames?.GetValueOrDefault("EN-US") ?? entry.UniqueName,
                 Tier = tier,
                 ItemGroup = group,
+                Index = entry.Index,
             });
         }
 
@@ -68,6 +71,12 @@ public class ItemDictionaryService : IItemDictionaryService
     {
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
         return await dbContext.ItemDictionaries.FirstOrDefaultAsync(item => item.UniqueName == id);
+    }
+
+    public async Task<ItemDictionary?> GetItemByIndexAsync(int index)
+    {
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        return await dbContext.ItemDictionaries.FirstOrDefaultAsync(item => item.Index == index);
     }
 
     public async Task<IReadOnlyDictionary<string, ItemDictionary>> GetItemsByIdAsync(IEnumerable<string> ids)
@@ -108,5 +117,6 @@ public class ItemDictionaryService : IItemDictionaryService
     {
         public string? UniqueName { get; set; }
         public Dictionary<string, string>? LocalizedNames { get; set; }
+        public int Index { get; set; }
     }
 }

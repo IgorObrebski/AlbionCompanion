@@ -37,7 +37,6 @@ public static class AppHostBuilder
         services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
         services.AddSingleton<IZoneCatalog, ZoneCatalog>();
         services.AddSingleton<ILocalPlayerTracker, LocalPlayerTracker>();
-        services.AddSingleton<IHarvestableNodeTracker, HarvestableNodeTracker>();
         services.AddScoped<IGatheringSessionService, GatheringSessionService>();
         services.AddSingleton<IItemDictionaryService, ItemDictionaryService>();
         services.AddScoped<ZoneTracker>();
@@ -75,7 +74,6 @@ public static class AppHostBuilder
         _ = provider.GetRequiredService<AlbionEventLogger>();
         _ = provider.GetRequiredService<AlbionEventNameLogger>();
         _ = provider.GetRequiredService<ILocalPlayerTracker>();
-        _ = provider.GetRequiredService<IHarvestableNodeTracker>();
 
         var sessionScope = provider.CreateScope();
         var zoneTracker = sessionScope.ServiceProvider.GetRequiredService<ZoneTracker>();

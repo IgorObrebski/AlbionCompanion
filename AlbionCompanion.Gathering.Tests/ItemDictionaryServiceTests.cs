@@ -40,11 +40,13 @@ public class ItemDictionaryServiceTests
         [
             {
                 "UniqueName": "T4_ORE",
-                "LocalizedNames": { "EN-US": "Iron Ore", "PL-PL": "Ruda Żelaza" }
+                "LocalizedNames": { "EN-US": "Iron Ore", "PL-PL": "Ruda Żelaza" },
+                "Index": 972
             },
             {
                 "UniqueName": "MAIN_SWORD",
-                "LocalizedNames": { "EN-US": "Sword", "PL-PL": "Miecz" }
+                "LocalizedNames": { "EN-US": "Sword", "PL-PL": "Miecz" },
+                "Index": 100
             },
             {
                 "LocalizedNames": { "EN-US": "No unique name, should be skipped" }
@@ -151,6 +153,33 @@ public class ItemDictionaryServiceTests
 
         var result = Assert.Single(results);
         Assert.Equal("T4_ORE", result.UniqueName);
+    }
+
+    [Fact]
+    public async Task GetItemByIndexAsync_KnownIndex_ReturnsMatchingEntry()
+    {
+        // GatheringEventRouter resolves HarvestFinished's item entirely by this Index - confirmed
+        // via live capture 2026-08-02 to be the exact numeric item id the game itself uses.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection, SampleItemsJson);
+        await service.SeedFromJsonAsync();
+
+        var result = await service.GetItemByIndexAsync(972);
+
+        Assert.NotNull(result);
+        Assert.Equal("T4_ORE", result!.UniqueName);
+    }
+
+    [Fact]
+    public async Task GetItemByIndexAsync_UnknownIndex_ReturnsNull()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection, SampleItemsJson);
+        await service.SeedFromJsonAsync();
+
+        Assert.Null(await service.GetItemByIndexAsync(999999));
     }
 
     [Fact]

@@ -16,28 +16,36 @@ namespace AlbionCompanion.Gathering;
 //   2. Amount: HarvestStart carries no yield amount at all, so every swing was hardcoded to +1 -
 //      wrong for gear/Focus/specialization bonuses that grant more than 1 unit per swing (the
 //      player explicitly flagged this - "gathering level" bonuses can't be assumed away as flat).
-// HarvestFinished parameter 5 is the real per-swing yield, confirmed by a controlled experiment:
-// the player watched their exact resource count in-game across three swings on one node (deltas
-// +2, +2, +2) - parameter 5 read 2, 2, 2 across the matching three HarvestFinished events, not the
-// naive assumption of always 1. A second experiment deliberately interrupted the third of three
-// swings (deltas +2, +2, +0) - the first two HarvestFinished events again showed parameter 5 = 2,
-// and the third had parameter 5 *absent* entirely (Photon omits parameters at their default value
-// - 0 here), matching the real zero gain exactly. AddItemAsync is skipped entirely when parameter
-// 5 is absent or non-positive, so an interrupted swing correctly adds nothing.
-// (An earlier, wrong hypothesis considered parameter 8 for this - it also varies per swing, but a
-// clean unbroken 2/2/2 experiment showed it decrementing 2,1,0 regardless, meaning it tracks
-// something else, most likely the node's remaining charges - not yield.)
-// A third experiment isolated a gathering-specialization bonus proc (deltas +2, +2, +4): the first
-// two HarvestFinished events had parameter 5 = 2 and no parameter 6 at all (equivalent to 0); the
-// bonus swing had parameter 5 = 2 *and* parameter 6 = 2 - the bonus rides in a separate parameter,
-// not folded into parameter 5, so real yield is parameter 5 + parameter 6.
+// HarvestFinished parameter 5 is the real per-swing base yield, confirmed by a controlled
+// experiment: the player watched their exact resource count in-game across three swings on one
+// node (deltas +2, +2, +2) - parameter 5 read 2, 2, 2 across the matching three HarvestFinished
+// events, not the naive assumption of always 1. A second experiment deliberately interrupted the
+// third of three swings (deltas +2, +2, +0) - the first two HarvestFinished events again showed
+// parameter 5 = 2, and the third had parameter 5 *absent* entirely (Photon omits parameters at
+// their default value - 0 here), matching the real zero gain exactly. A third experiment isolated
+// a gathering-specialization bonus proc (deltas +2, +2, +4): the bonus swing additionally had
+// parameter 6 = 2 (the first two had no parameter 6 at all) - the bonus rides in its own
+// parameter, not folded into parameter 5, so real yield is parameter 5 + parameter 6.
+// AddItemAsync is skipped entirely when the total is absent or non-positive, so an interrupted
+// swing correctly adds nothing.
+// (An earlier, wrong hypothesis considered parameter 8 for the base amount - it also varies per
+// swing, but a clean unbroken 2/2/2 experiment showed it decrementing 2,1,0 regardless, meaning it
+// tracks something else, most likely the node's remaining charges - not yield.)
 //
-// Unlike HarvestStart, HarvestFinished does NOT carry the resource's category code (parameter 4
-// there is some other value, not a HarvestableCategory-range code) - only the node id (parameter
-// 3, same position as HarvestStart's). Category, tier, and enchantment level are all resolved
-// through IHarvestableNodeTracker's NewHarvestableObject cache instead (see that class) - if the
-// node's spawn broadcast was never captured, none of the three can be resolved and the item id
-// falls back to the bare node id, an approximate id beating dropping the swing.
+// Item identity: parameter 4 of HarvestFinished is the exact numeric "Index" ao-bin-dumps
+// items.json assigns per UniqueName (confirmed 2026-08-02 by cross-referencing several live swings
+// against the real items.json - e.g. 978 -> "T5_ORE_LEVEL2@2", 1022 -> "T4_FIBER", 972 ->
+// "T4_ORE_LEVEL1@1", every one matching exactly what the player was actually gathering at that
+// moment). This already encodes tier, category, AND enchantment level in one value - a huge
+// simplification over the previous approach (composing "T{tier}_{CATEGORY}" from a node-id keyed
+// cache fed by NewHarvestableObject/HarvestStart broadcasts, which needed to have seen a signal
+// for that specific node first - useless right after an app restart for any node the player had
+// already visited in a prior process, since NewHarvestableObject is a one-time "entered view
+// range" broadcast that won't re-fire for an already-loaded node). IHarvestableNodeTracker and its
+// node-id-keyed tier/category/enchantment caching have been removed entirely - nothing needs them
+// anymore. If the index isn't in IItemDictionaryService (e.g. seeding failed, or this is a rare
+// item type not covered by testing), the fallback is the bare numeric index, an approximate id
+// beating dropping the swing.
 //
 // Fame gain: UpdateFame (code 82) confirmed via live capture on 2026-07-18 mining Iron (T4 Ore).
 // Parameter 0 is the earning character's own entity id (broadcast is self-only in every sample
@@ -50,11 +58,6 @@ namespace AlbionCompanion.Gathering;
 // AddFameAsync divides by FameScaleFactor to store the human-readable number FameLog.Amount and
 // GatheringSession.TotalFameEarned are meant to hold.
 //
-// itemId is built as "T{tier}_{CATEGORY}" (e.g. "T4_ORE"), or "T{tier}_{CATEGORY}_LEVEL{n}@{n}"
-// for an enchanted resource (matching ao-bin-dumps items.json's real UniqueName convention) - this
-// is still the resource's UniqueName, not a localized display name, see
-// specs/albion-companion-context.md's ItemDictionary/ao-bin-dumps items.json import for that.
-//
 // Filters by actor: HarvestFinished is broadcast to every client in the zone, not just the
 // player's own actions (confirmed via live capture, same as HarvestStart before it - a session
 // recorded two other players' harvest swings on different resource types alongside the player's
@@ -64,7 +67,7 @@ public class GatheringEventRouter
 {
     private const byte SemanticEventCodeParameterKey = 252;
     private const byte HarvestActorEntityIdParameterKey = 0;
-    private const byte HarvestNodeIdParameterKey = 3;
+    private const byte HarvestItemIndexParameterKey = 4;
     private const byte HarvestFinishedAmountParameterKey = 5;
     private const byte HarvestFinishedBonusAmountParameterKey = 6;
     private const byte FameActorEntityIdParameterKey = 0;
@@ -74,7 +77,7 @@ public class GatheringEventRouter
 
     private readonly IGatheringSessionService _sessionService;
     private readonly ILocalPlayerTracker _localPlayerTracker;
-    private readonly IHarvestableNodeTracker _nodeTracker;
+    private readonly IItemDictionaryService _itemDictionary;
 
     // Surfaces any exception from AddItemAsync instead of letting it vanish as an unobserved
     // fire-and-forget task fault. photonParser.OnEventReceived's subscriber lambda below discards
@@ -89,11 +92,11 @@ public class GatheringEventRouter
         IPhotonParser photonParser,
         IGatheringSessionService sessionService,
         ILocalPlayerTracker localPlayerTracker,
-        IHarvestableNodeTracker nodeTracker)
+        IItemDictionaryService itemDictionary)
     {
         _sessionService = sessionService;
         _localPlayerTracker = localPlayerTracker;
-        _nodeTracker = nodeTracker;
+        _itemDictionary = itemDictionary;
         photonParser.OnEventReceived += (_, e) => _ = HandleEventAsync(e);
     }
 
@@ -146,32 +149,27 @@ public class GatheringEventRouter
         return false;
     }
 
-    private Task HandleHarvestFinishedAsync(PhotonEvent photonEvent)
+    private async Task HandleHarvestFinishedAsync(PhotonEvent photonEvent)
     {
         if (!photonEvent.Parameters.TryGetValue(HarvestActorEntityIdParameterKey, out var actorIdValue) || actorIdValue is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         // Unknown local entity id (e.g. before the first zone-join response arrives) means we
         // can't confirm this swing is the player's own - skip rather than risk misattributing it.
         if (_localPlayerTracker.CurrentEntityId is not { } localEntityId || Convert.ToInt32(actorIdValue) != localEntityId)
         {
-            return Task.CompletedTask;
+            return;
         }
 
         // Absent means Photon omitted it at its default value (0) - an interrupted swing that
         // yielded nothing. Not an error, just nothing to record.
         if (!photonEvent.Parameters.TryGetValue(HarvestFinishedAmountParameterKey, out var amountValue) || amountValue is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        // Confirmed via live capture 2026-08-02: a swing that rolls a gathering-specialization
-        // bonus reports the base amount in parameter 5 and the bonus separately in parameter 6
-        // (0 - and typically omitted from the wire entirely - when no bonus procs). A controlled
-        // test where the player watched their exact resource count (deltas +2, +2, +4) matched
-        // parameter 5 = 2 on every swing and parameter 6 = 2 only on the bonus swing (2+2=4).
         var amount = Convert.ToInt32(amountValue);
         if (photonEvent.Parameters.TryGetValue(HarvestFinishedBonusAmountParameterKey, out var bonusValue) && bonusValue is not null)
         {
@@ -180,17 +178,17 @@ public class GatheringEventRouter
 
         if (amount <= 0)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        if (!photonEvent.Parameters.TryGetValue(HarvestNodeIdParameterKey, out var nodeIdValue) || nodeIdValue is null)
+        if (!photonEvent.Parameters.TryGetValue(HarvestItemIndexParameterKey, out var indexValue) || indexValue is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var itemId = ResolveItemId(Convert.ToInt32(nodeIdValue));
+        var itemId = await ResolveItemIdAsync(Convert.ToInt32(indexValue));
 
-        return _sessionService.AddItemAsync(itemId, amount);
+        await _sessionService.AddItemAsync(itemId, amount);
     }
 
     private async Task HandleUpdateFameAsync(PhotonEvent photonEvent)
@@ -214,26 +212,12 @@ public class GatheringEventRouter
         await _sessionService.AddFameAsync(GatheringFameType, fameAmount);
     }
 
-    private string ResolveItemId(int nodeId)
+    private async Task<string> ResolveItemIdAsync(int itemIndex)
     {
-        var categoryCode = _nodeTracker.GetCategoryCode(nodeId);
-        var category = categoryCode is { } code ? HarvestableCategory.FromTypeCode(code) : null;
-        var tier = _nodeTracker.GetTier(nodeId);
+        var entry = await _itemDictionary.GetItemByIndexAsync(itemIndex);
 
-        // Fall back to the bare node id if we can't resolve a full "T{tier}_{CATEGORY}" id (e.g.
-        // the node's spawn broadcast was never captured, or the category code is out of every
-        // known range) - an approximate item id beats silently dropping the swing.
-        if (category is null || tier is null)
-        {
-            return nodeId.ToString();
-        }
-
-        // Matches ao-bin-dumps items.json's real UniqueName convention for enchanted resources
-        // (e.g. "T4_ORE_LEVEL2@2" = Rare Iron Ore) - confirmed via live capture on 2026-08-02 (see
-        // HarvestableNodeTracker). Enchant level 0 (unenchanted) uses the bare id with no suffix.
-        var enchantmentLevel = _nodeTracker.GetEnchantmentLevel(nodeId) ?? 0;
-        return enchantmentLevel > 0
-            ? $"T{tier}_{category}_LEVEL{enchantmentLevel}@{enchantmentLevel}"
-            : $"T{tier}_{category}";
+        // Fall back to the bare numeric index if it's not in the dictionary (e.g. seeding failed,
+        // or a genuinely uncovered item type) - an approximate id beats silently dropping the swing.
+        return entry?.UniqueName ?? itemIndex.ToString();
     }
 }

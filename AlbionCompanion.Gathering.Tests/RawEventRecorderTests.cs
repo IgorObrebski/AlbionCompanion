@@ -59,6 +59,26 @@ public class RawEventRecorderTests
         Assert.Equal(session!.Id, stored.SessionId);
         Assert.Equal((byte)1, stored.PhotonCode);
         Assert.Equal((byte)59, stored.SemanticEventCode);
+        Assert.Equal("HarvestStart", stored.EventName);
+    }
+
+    [Fact]
+    public async Task EventWithUnrecognizedSemanticCode_RecordsNullEventName()
+    {
+        // AlbionEventCode only covers codes confirmed against real captures (see its own header
+        // comment) - most codes seen on the wire aren't in it yet, and EventName should reflect
+        // that honestly rather than guessing.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context, factory) = CreateServiceWithContext(connection);
+        var parser = new FakePhotonParser();
+        var recorder = new RawEventRecorder(parser, factory);
+
+        await recorder.HandleEventAsync(new PhotonEvent(1, new Dictionary<byte, object?> { [252] = (byte)250 }));
+
+        var stored = Assert.Single(context.RawGatheringEvents);
+        Assert.Equal((byte)250, stored.SemanticEventCode);
+        Assert.Null(stored.EventName);
     }
 
     [Fact]
