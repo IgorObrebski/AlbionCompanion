@@ -22,6 +22,12 @@ public class AlbionPhotonParser : PhotonParser, IPhotonParser
             // One bad payload must not stop the sniffer from processing the rest of the traffic.
             // NOTE: a packet can bundle multiple Photon commands (see PhotonParser.ReceivePacket's
             // command loop) - an exception here aborts every remaining command in this datagram.
+            //
+            // Stash payload length/prefix on the exception (rather than changing OnParseFailure's
+            // signature) so subscribers logging this can correlate it against debug_packets.log
+            // without every consumer needing to plumb the raw payload through.
+            ex.Data["PayloadLength"] = payload.Length;
+            ex.Data["PayloadHexPrefix"] = Convert.ToHexString(payload, 0, Math.Min(payload.Length, 32));
             OnParseFailure?.Invoke(this, ex);
         }
     }

@@ -1,4 +1,4 @@
-# Sesja 2026-07-16 — od "sniffer nic nie łapie" do działającego pipeline'u gatheringu
+cla# Sesja 2026-07-16 — od "sniffer nic nie łapie" do działającego pipeline'u gatheringu
 
 ## Punkt startowy
 

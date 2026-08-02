@@ -46,6 +46,9 @@ public class GatheringEventRouterTests
     private static PhotonEvent HarvestStart(int actorEntityId, int categoryCode, int nodeId = NodeId) =>
         new(1, new Dictionary<byte, object?> { [0] = actorEntityId, [3] = nodeId, [4] = categoryCode, [252] = (byte)59 });
 
+    private static PhotonEvent UpdateFame(int actorEntityId, int fameDelta) =>
+        new(1, new Dictionary<byte, object?> { [0] = actorEntityId, [2] = fameDelta, [252] = (byte)82 });
+
     [Fact]
     public async Task HarvestStartEvent_WithKnownTierAndCategory_AddsFullyResolvedItemId()
     {
@@ -177,5 +180,42 @@ public class GatheringEventRouterTests
         await router.HandleEventAsync(HarvestStart(actorEntityId: LocalPlayerEntityId, categoryCode: 27));
 
         Assert.Empty(context.GatheredItems);
+    }
+
+    [Fact]
+    public async Task UpdateFameEvent_ForLocalPlayer_AddsScaledFameLog()
+    {
+        // Wire-value scale confirmed via live capture on 2026-07-18: successive UpdateFame events'
+        // running-total parameter (1) advanced by exactly the delta parameter (2) each time, and
+        // dividing that delta by 10000 lines up with a plausible per-swing fame number (600000 -> 60).
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateServiceWithOpenSession(connection);
+        await service.StartSessionAsync("4213");
+        var parser = new FakePhotonParser();
+        var localPlayer = new FakeLocalPlayerTracker { CurrentEntityId = LocalPlayerEntityId };
+        var router = new GatheringEventRouter(parser, service, localPlayer, new FakeHarvestableNodeTracker());
+
+        await router.HandleEventAsync(UpdateFame(actorEntityId: LocalPlayerEntityId, fameDelta: 600000));
+
+        var fameLog = Assert.Single(context.FameLogs);
+        Assert.Equal("Gathering", fameLog.FameType);
+        Assert.Equal(60, fameLog.Amount);
+    }
+
+    [Fact]
+    public async Task UpdateFameEvent_ByAnotherNearbyPlayer_IsIgnored()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateServiceWithOpenSession(connection);
+        await service.StartSessionAsync("4213");
+        var parser = new FakePhotonParser();
+        var localPlayer = new FakeLocalPlayerTracker { CurrentEntityId = LocalPlayerEntityId };
+        var router = new GatheringEventRouter(parser, service, localPlayer, new FakeHarvestableNodeTracker());
+
+        await router.HandleEventAsync(UpdateFame(actorEntityId: 448437, fameDelta: 600000));
+
+        Assert.Empty(context.FameLogs);
     }
 }

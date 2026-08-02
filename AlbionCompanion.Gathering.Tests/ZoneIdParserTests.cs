@@ -14,6 +14,18 @@ public class ZoneIdParserTests
     }
 
     [Fact]
+    public void PlainNumericString_ReturnsNumericZoneId()
+    {
+        // Confirmed via live capture on 2026-07-18: PhotonPackageParser decodes zone id parameter
+        // 8 as a System.String even for plain city/open-world zones (e.g. "4000", "4203"), never
+        // a boxed int - this is the real-world shape, not BoxedInt_ReturnsNumericZoneId above.
+        var result = ZoneIdParser.Parse("4203");
+
+        Assert.Equal(4203, result.NumericZoneId);
+        Assert.False(result.IsMists);
+    }
+
+    [Fact]
     public void MistsPrefixedString_ReturnsIsMists()
     {
         var result = ZoneIdParser.Parse("@MISTS@some-guid-looking-string");

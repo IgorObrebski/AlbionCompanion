@@ -25,10 +25,18 @@ public class AppDbContext : DbContext
         {
             entity.HasIndex(e => e.SessionId);
             entity.HasIndex(e => e.Timestamp);
+            // SetNull, not the default Restrict: RawGatheringEvent is an independent audit trail
+            // that should outlive its session - GatheringSessionService.EndSessionAsync deletes
+            // empty sessions outright (see its "no activity" branch), and virtually every session
+            // has at least one raw event recorded against it (RawEventRecorder logs everything).
+            // Restrict silently blocked every such delete with a FOREIGN KEY constraint failure
+            // until ZoneTracker.OnError's logging surfaced it (confirmed via live capture on
+            // 2026-07-18) - SetNull keeps the raw events, just detaches them from the deleted session.
             entity.HasOne(e => e.Session)
                 .WithMany()
                 .HasForeignKey(e => e.SessionId)
-                .IsRequired(false);
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

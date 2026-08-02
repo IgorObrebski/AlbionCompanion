@@ -23,11 +23,22 @@ public class GatheringSessionService : IGatheringSessionService
 
     public async Task StartSessionAsync(string location)
     {
-        // Invariant: at most one open (EndTime == null) session at a time - if one is already
-        // active (e.g. a duplicate zone-change event, or resuming after a DC in the wilderness),
-        // this is a no-op rather than starting a second concurrent session.
-        if (await GetActiveSessionAsync() is not null)
+        // Invariant: at most one open (EndTime == null) session at a time. A wilderness session
+        // can roam through many open-world zones without ending (only a return to a city/safe
+        // area ends it - see EndSessionAsync/ZoneTracker), so a zone change while a session is
+        // already active isn't a duplicate to ignore - it's the player moving. Update
+        // CurrentLocation to reflect that instead of silently no-op'ing, or the session's location
+        // would stay frozen at wherever it started (confirmed via live capture on 2026-07-18: a
+        // session that started in one zone and roamed to another still showed the first zone as
+        // "current" indefinitely).
+        if (await GetActiveSessionAsync() is { } activeSession)
         {
+            if (activeSession.CurrentLocation != location)
+            {
+                activeSession.CurrentLocation = location;
+                await _dbContext.SaveChangesAsync();
+            }
+
             return;
         }
 
@@ -35,6 +46,7 @@ public class GatheringSessionService : IGatheringSessionService
         {
             StartTime = DateTime.UtcNow,
             StartLocation = location,
+            CurrentLocation = location,
         };
         _dbContext.GatheringSessions.Add(session);
 

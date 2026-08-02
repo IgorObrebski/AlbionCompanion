@@ -49,6 +49,41 @@ public class GatheringSessionServiceTests
     }
 
     [Fact]
+    public async Task StartSessionAsync_WhenAlreadyActive_UpdatesCurrentLocationButNotStartLocation()
+    {
+        // Regression: a wilderness session can roam through many open-world zones without
+        // ending (only a return to a city/safe area ends it) - confirmed via live capture on
+        // 2026-07-18 that a session which started in one zone and moved to another still showed
+        // the first zone as "current" indefinitely, because StartSessionAsync used to no-op
+        // entirely on an already-active session.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+        var service = new GatheringSessionService(context);
+
+        await service.StartSessionAsync("Martlock");
+        await service.StartSessionAsync("Bridgewatch");
+
+        var active = await service.GetActiveSessionAsync();
+        Assert.Equal("Martlock", active!.StartLocation);
+        Assert.Equal("Bridgewatch", active.CurrentLocation);
+    }
+
+    [Fact]
+    public async Task StartSessionAsync_SetsCurrentLocationToStartLocationInitially()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+        var service = new GatheringSessionService(context);
+
+        await service.StartSessionAsync("Martlock");
+
+        var active = await service.GetActiveSessionAsync();
+        Assert.Equal("Martlock", active!.CurrentLocation);
+    }
+
+    [Fact]
     public async Task EndSessionAsync_WithGatheredItems_ClosesSessionInstadOfDeletingIt()
     {
         using var connection = new SqliteConnection("DataSource=:memory:");
