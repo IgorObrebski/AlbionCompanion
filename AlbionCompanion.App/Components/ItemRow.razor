@@ -1,0 +1,34 @@
+@* Renders one <tr> for a gathered-item row (icon + id, tier badge, right-aligned amount). Shared
+   by Home's live table and SessionDetail's historical table so the two never drift apart. *@
+<tr class="@CssClass">
+    <td class="ac-item-cell">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ac-text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            @foreach (var path in ItemDisplay.CategoryIconPaths(Category))
+            {
+                <path d="@path" />
+            }
+        </svg>
+        @ItemId
+    </td>
+    <td>
+        @if (Tier is not null)
+        {
+            <span class="ac-tag @ItemDisplay.TierCssClass(Tier)">T@(Tier)</span>
+        }
+    </td>
+    <td class="ac-num">@Amount</td>
+</tr>
+
+@code {
+    [Parameter, EditorRequired]
+    public string ItemId { get; set; } = string.Empty;
+
+    [Parameter]
+    public int Amount { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    private int? Tier => ItemDisplay.Parse(ItemId).Tier;
+    private string Category => ItemDisplay.Parse(ItemId).Category;
+}

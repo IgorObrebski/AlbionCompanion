@@ -1,0 +1,113 @@
+@* Filterable/sortable/paginated table of gathered items. Client-side (item counts per session
+   are small - dozens of distinct tier/category combos at most, never worth a DB round trip). *@
+<div style="display:flex; align-items:center; justify-content:space-between; gap: var(--ac-space-3); margin-bottom: var(--ac-space-3);">
+    <div class="ac-section-label" style="margin-bottom:0;">@Title</div>
+    <input class="ac-input" style="min-width:160px;" type="text" placeholder="Filter items..." value="@_filter" @oninput="OnFilterInput" />
+</div>
+
+@{
+    var rows = FilteredSorted();
+}
+
+@if (rows.Count == 0)
+{
+    <p class="ac-subtitle">No items match "@_filter".</p>
+}
+else
+{
+    <table class="ac-table">
+        <thead>
+            <tr>
+                <th><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Item)">Item @SortIndicator(SortColumn.Item)</button></th>
+                <th><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Tier)">Tier @SortIndicator(SortColumn.Tier)</button></th>
+                <th class="ac-num"><button class="ac-sort-btn" @onclick="() => SetSort(SortColumn.Amount)">Amount @SortIndicator(SortColumn.Amount)</button></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var (itemId, amount) in rows.Skip((_page - 1) * PageSize).Take(PageSize))
+            {
+                <ItemRow ItemId="@itemId" Amount="@amount" />
+            }
+        </tbody>
+    </table>
+
+    var totalPages = Math.Max(1, (int)Math.Ceiling(rows.Count / (double)PageSize));
+    @if (totalPages > 1)
+    {
+        <div class="ac-pager">
+            <button class="ac-pager-btn" disabled="@(_page <= 1)" @onclick="() => _page--">Prev</button>
+            <span class="ac-subtitle" style="margin:0;">Page @_page of @totalPages</span>
+            <button class="ac-pager-btn" disabled="@(_page >= totalPages)" @onclick="() => _page++">Next</button>
+        </div>
+    }
+}
+
+@code {
+    private enum SortColumn { Item, Tier, Amount }
+
+    [Parameter, EditorRequired]
+    public IReadOnlyDictionary<string, int> Items { get; set; } = new Dictionary<string, int>();
+
+    [Parameter]
+    public string Title { get; set; } = "Items";
+
+    private const int PageSize = 15;
+
+    private string _filter = string.Empty;
+    private SortColumn _sortBy = SortColumn.Amount;
+    private bool _sortDescending = true;
+    private int _page = 1;
+
+    private void OnFilterInput(ChangeEventArgs e)
+    {
+        _filter = e.Value?.ToString() ?? string.Empty;
+        _page = 1;
+    }
+
+    private void SetSort(SortColumn column)
+    {
+        if (_sortBy == column)
+        {
+            _sortDescending = !_sortDescending;
+        }
+        else
+        {
+            _sortBy = column;
+            _sortDescending = true;
+        }
+
+        _page = 1;
+    }
+
+    private string SortIndicator(SortColumn column) =>
+        _sortBy != column ? "" : _sortDescending ? "▾" : "▴";
+
+    private List<KeyValuePair<string, int>> FilteredSorted()
+    {
+        IEnumerable<KeyValuePair<string, int>> query = Items;
+        if (!string.IsNullOrWhiteSpace(_filter))
+        {
+            query = query.Where(kv => kv.Key.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        query = _sortBy switch
+        {
+            SortColumn.Item => _sortDescending ? query.OrderByDescending(kv => kv.Key) : query.OrderBy(kv => kv.Key),
+            SortColumn.Tier => _sortDescending
+                ? query.OrderByDescending(kv => ItemDisplay.Parse(kv.Key).Tier ?? -1)
+                : query.OrderBy(kv => ItemDisplay.Parse(kv.Key).Tier ?? -1),
+            _ => _sortDescending ? query.OrderByDescending(kv => kv.Value) : query.OrderBy(kv => kv.Value),
+        };
+
+        var list = query.ToList();
+
+        // Guard against the page going stale after a filter shrinks the result set out from under it.
+        var totalPages = Math.Max(1, (int)Math.Ceiling(list.Count / (double)PageSize));
+        if (_page > totalPages)
+        {
+            _page = totalPages;
+        }
+
+        return list;
+    }
+}

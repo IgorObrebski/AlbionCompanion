@@ -3,34 +3,35 @@
 @inject IGatheringLiveState LiveState
 @implements IDisposable
 
-<h1>AlbionCompanion</h1>
-
 @if (LiveState.StartLocation is null)
 {
-    <p>No session.</p>
+    <div class="ac-empty">
+        <span class="ac-dot ac-dot-ended"></span>
+        <h1 class="ac-status-title">No session</h1>
+        <p class="ac-subtitle">Head into the open world to start tracking a gathering session.</p>
+    </div>
 }
 else
 {
-    <p>@(LiveState.IsActive ? "Active" : "Ended") — @LiveState.StartLocation</p>
-    <p>Total fame: @LiveState.TotalFame</p>
+    <div class="ac-status-row">
+        <span class="ac-dot @(LiveState.IsActive ? "ac-dot-active" : "ac-dot-ended")"></span>
+        <h1 class="ac-status-title">@(LiveState.IsActive ? "Active" : "Ended") — @LiveState.StartLocation</h1>
+    </div>
+
+    <div class="ac-card">
+        <div class="ac-card-head">
+            <div class="ac-card-kicker">Total fame — this session</div>
+        </div>
+        <div class="ac-card-value">@LiveState.TotalFame.ToString("N0")</div>
+    </div>
 
     @if (LiveState.ItemTotals.Count == 0)
     {
-        <p>No items collected yet.</p>
+        <p class="ac-subtitle">No items collected yet.</p>
     }
     else
     {
-        <table class="table">
-            <thead>
-                <tr><th>Item</th><th>Amount</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var (itemId, amount) in LiveState.ItemTotals)
-                {
-                    <tr><td>@itemId</td><td>@amount</td></tr>
-                }
-            </tbody>
-        </table>
+        <ItemTable Items="LiveState.ItemTotals" Title="Items gathered — live" />
     }
 }
 

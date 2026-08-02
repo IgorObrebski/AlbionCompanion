@@ -2,59 +2,97 @@
 @using AlbionCompanion.Gathering
 @inject ISessionHistoryService HistoryService
 
-<h1>Sessions</h1>
+<h1 style="font-size: 24px; margin-bottom: 4px;">Sessions</h1>
+
+<div style="display:flex; align-items:center; gap: var(--ac-space-3); margin-bottom: var(--ac-space-4);">
+    <input class="ac-input" type="text" placeholder="Filter by zone..." value="@_locationFilter" @oninput="OnFilterChanged" />
+    @if (_page is not null)
+    {
+        <span class="ac-subtitle" style="margin: 0;">@_page.TotalCount recorded</span>
+    }
+</div>
 
 @if (_loadFailed)
 {
-    <p>Could not load sessions yet — the database may still be initializing. Try again shortly.</p>
+    <p class="ac-subtitle">Could not load sessions yet — the database may still be initializing. Try again shortly.</p>
 }
-else if (_sessions is null)
+else if (_page is null)
 {
-    <p>Loading...</p>
+    <p class="ac-subtitle">Loading...</p>
 }
-else if (_sessions.Count == 0)
+else if (_page.TotalCount == 0)
 {
-    <p>No completed sessions yet.</p>
+    <p class="ac-subtitle">No completed sessions yet.</p>
+}
+else if (_page.Items.Count == 0)
+{
+    <p class="ac-subtitle">No sessions match "@_locationFilter".</p>
 }
 else
 {
-    <table class="table">
+    <table class="ac-table">
         <thead>
             <tr>
-                <th>Start</th>
-                <th>Location</th>
+                <th><button class="ac-sort-btn" @onclick="() => SetSort(SessionSortColumn.Location)">Zone @SortIndicator(SessionSortColumn.Location)</button></th>
+                <th><button class="ac-sort-btn" @onclick="() => SetSort(SessionSortColumn.StartTime)">Start @SortIndicator(SessionSortColumn.StartTime)</button></th>
                 <th>Duration</th>
-                <th>Fame</th>
-                <th>Items</th>
+                <th class="ac-num"><button class="ac-sort-btn" @onclick="() => SetSort(SessionSortColumn.Fame)">Fame @SortIndicator(SessionSortColumn.Fame)</button></th>
+                <th class="ac-num"><button class="ac-sort-btn" @onclick="() => SetSort(SessionSortColumn.Items)">Items @SortIndicator(SessionSortColumn.Items)</button></th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var session in _sessions)
+            @foreach (var session in _page.Items)
             {
-                <tr @onclick="() => NavigateToDetail(session.Id)" style="cursor:pointer">
+                <tr class="ac-row-clickable" @onclick="() => NavigateToDetail(session.Id)">
+                    <td class="ac-item-cell">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.55;"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /><circle cx="12" cy="10" r="3" /></svg>
+                        @session.StartLocation
+                    </td>
                     <td>@session.StartTime.ToLocalTime().ToString("g")</td>
-                    <td>@session.StartLocation</td>
                     <td>@FormatDuration(session.EndTime - session.StartTime)</td>
-                    <td>@session.TotalFameEarned</td>
-                    <td>@session.TotalItemsCollected</td>
+                    <td class="ac-num">@session.TotalFameEarned.ToString("N0")</td>
+                    <td class="ac-num">@session.TotalItemsCollected</td>
                 </tr>
             }
         </tbody>
     </table>
+
+    @if (_page.TotalPages > 1)
+    {
+        <div class="ac-pager">
+            <button class="ac-pager-btn" disabled="@(_page.Page <= 1)" @onclick="() => GoToPage(_page.Page - 1)">Prev</button>
+            <span class="ac-subtitle" style="margin:0;">Page @_page.Page of @_page.TotalPages</span>
+            <button class="ac-pager-btn" disabled="@(_page.Page >= _page.TotalPages)" @onclick="() => GoToPage(_page.Page + 1)">Next</button>
+        </div>
+    }
 }
 
 @code {
-    private IReadOnlyList<SessionSummary>? _sessions;
+    private const int PageSize = 20;
+
+    private PagedResult<SessionSummary>? _page;
     private bool _loadFailed;
+    private string _locationFilter = string.Empty;
+    private SessionSortColumn _sortBy = SessionSortColumn.StartTime;
+    private bool _sortDescending = true;
+    private int _currentPage = 1;
+    private CancellationTokenSource? _filterDebounce;
 
     [Inject]
     private NavigationManager Navigation { get; set; } = null!;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
     {
         try
         {
-            _sessions = await HistoryService.GetCompletedSessionsAsync();
+            _page = await HistoryService.GetCompletedSessionsAsync(new SessionQuery(
+                Page: _currentPage,
+                PageSize: PageSize,
+                LocationFilter: _locationFilter,
+                SortBy: _sortBy,
+                SortDescending: _sortDescending));
         }
         catch
         {
@@ -65,6 +103,53 @@ else
             _loadFailed = true;
         }
     }
+
+    private async Task OnFilterChanged(ChangeEventArgs e)
+    {
+        _locationFilter = e.Value?.ToString() ?? string.Empty;
+        _currentPage = 1;
+
+        // Debounce so every keystroke doesn't fire its own DB query.
+        _filterDebounce?.Cancel();
+        var cts = new CancellationTokenSource();
+        _filterDebounce = cts;
+        try
+        {
+            await Task.Delay(250, cts.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task SetSort(SessionSortColumn column)
+    {
+        if (_sortBy == column)
+        {
+            _sortDescending = !_sortDescending;
+        }
+        else
+        {
+            _sortBy = column;
+            _sortDescending = true;
+        }
+
+        _currentPage = 1;
+        await LoadAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        _currentPage = page;
+        await LoadAsync();
+    }
+
+    private string SortIndicator(SessionSortColumn column) =>
+        _sortBy != column ? "" : _sortDescending ? "▾" : "▴";
 
     private static string FormatDuration(TimeSpan duration) =>
         duration.Days > 0

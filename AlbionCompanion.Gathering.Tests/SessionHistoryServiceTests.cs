@@ -38,9 +38,10 @@ public class SessionHistoryServiceTests
         connection.Open();
         var (service, _) = CreateService(connection);
 
-        var result = await service.GetCompletedSessionsAsync();
+        var result = await service.GetCompletedSessionsAsync(new SessionQuery());
 
-        Assert.Empty(result);
+        Assert.Empty(result.Items);
+        Assert.Equal(0, result.TotalCount);
     }
 
     [Fact]
@@ -53,10 +54,10 @@ public class SessionHistoryServiceTests
         context.GatheringSessions.Add(new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "Lymhurst", EndTime = DateTime.UtcNow });
         await context.SaveChangesAsync();
 
-        var result = await service.GetCompletedSessionsAsync();
+        var result = await service.GetCompletedSessionsAsync(new SessionQuery());
 
-        Assert.Single(result);
-        Assert.Equal("Lymhurst", result[0].StartLocation);
+        Assert.Single(result.Items);
+        Assert.Equal("Lymhurst", result.Items[0].StartLocation);
     }
 
     [Fact]
@@ -70,10 +71,10 @@ public class SessionHistoryServiceTests
         context.GatheringSessions.AddRange(older, newer);
         await context.SaveChangesAsync();
 
-        var result = await service.GetCompletedSessionsAsync();
+        var result = await service.GetCompletedSessionsAsync(new SessionQuery());
 
-        Assert.Equal("Newer", result[0].StartLocation);
-        Assert.Equal("Older", result[1].StartLocation);
+        Assert.Equal("Newer", result.Items[0].StartLocation);
+        Assert.Equal("Older", result.Items[1].StartLocation);
     }
 
     [Fact]
@@ -89,10 +90,70 @@ public class SessionHistoryServiceTests
         context.GatheredItems.Add(new GatheredItem { SessionId = session.Id, ItemId = "T4_WOOD", Amount = 3, Timestamp = DateTime.UtcNow });
         await context.SaveChangesAsync();
 
-        var result = await service.GetCompletedSessionsAsync();
+        var result = await service.GetCompletedSessionsAsync(new SessionQuery());
 
-        Assert.Equal(8, result[0].TotalItemsCollected);
-        Assert.Equal(900, result[0].TotalFameEarned);
+        Assert.Equal(8, result.Items[0].TotalItemsCollected);
+        Assert.Equal(900, result.Items[0].TotalFameEarned);
+    }
+
+    [Fact]
+    public async Task GetCompletedSessionsAsync_Pagination_ReturnsRequestedPageAndTotalCount()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection);
+        for (var i = 0; i < 5; i++)
+        {
+            context.GatheringSessions.Add(new GatheringSession
+            {
+                StartTime = new DateTime(2026, 1, 1).AddDays(i),
+                StartLocation = $"Zone{i}",
+                EndTime = new DateTime(2026, 1, 1).AddDays(i).AddHours(1),
+            });
+        }
+
+        await context.SaveChangesAsync();
+
+        var result = await service.GetCompletedSessionsAsync(new SessionQuery(Page: 2, PageSize: 2));
+
+        Assert.Equal(5, result.TotalCount);
+        Assert.Equal(3, result.TotalPages);
+        Assert.Equal(2, result.Items.Count);
+        // Default sort is StartTime descending, so page 2 (items 3-4 of 5) is Zone2 then Zone1.
+        Assert.Equal("Zone2", result.Items[0].StartLocation);
+        Assert.Equal("Zone1", result.Items[1].StartLocation);
+    }
+
+    [Fact]
+    public async Task GetCompletedSessionsAsync_LocationFilter_MatchesSubstringCaseInsensitively()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection);
+        context.GatheringSessions.Add(new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "Cairn Camain", EndTime = DateTime.UtcNow });
+        context.GatheringSessions.Add(new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "Martlock", EndTime = DateTime.UtcNow });
+        await context.SaveChangesAsync();
+
+        var result = await service.GetCompletedSessionsAsync(new SessionQuery(LocationFilter: "cairn"));
+
+        Assert.Single(result.Items);
+        Assert.Equal("Cairn Camain", result.Items[0].StartLocation);
+    }
+
+    [Fact]
+    public async Task GetCompletedSessionsAsync_SortByFameAscending_OrdersLowestFirst()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection);
+        context.GatheringSessions.Add(new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "High", EndTime = DateTime.UtcNow, TotalFameEarned = 900 });
+        context.GatheringSessions.Add(new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "Low", EndTime = DateTime.UtcNow, TotalFameEarned = 100 });
+        await context.SaveChangesAsync();
+
+        var result = await service.GetCompletedSessionsAsync(new SessionQuery(SortBy: SessionSortColumn.Fame, SortDescending: false));
+
+        Assert.Equal("Low", result.Items[0].StartLocation);
+        Assert.Equal("High", result.Items[1].StartLocation);
     }
 
     [Fact]
