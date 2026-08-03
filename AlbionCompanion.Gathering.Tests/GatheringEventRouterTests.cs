@@ -21,6 +21,8 @@ public class GatheringEventRouterTests
     private sealed class FakeLocalPlayerTracker : ILocalPlayerTracker
     {
         public int? CurrentEntityId { get; set; }
+        public string? CurrentCharacterName { get; set; }
+        public event EventHandler<Exception>? OnError;
     }
 
     private sealed class FakeItemDictionaryService : IItemDictionaryService

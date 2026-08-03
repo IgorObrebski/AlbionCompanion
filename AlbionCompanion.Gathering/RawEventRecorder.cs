@@ -68,12 +68,12 @@ public class RawEventRecorder : IRawEventRecorder
     // that enum's own header comment) - most codes seen on the wire simply aren't in it yet, so
     // this returns null for those rather than guessing. Extend AlbionEventCode, not this method,
     // as more codes get confirmed.
-    private static string? ResolveEventName(byte? semanticEventCode) =>
+    private static string? ResolveEventName(ushort? semanticEventCode) =>
         semanticEventCode is { } code && Enum.IsDefined(typeof(AlbionEventCode), code)
             ? ((AlbionEventCode)code).ToString()
             : null;
 
-    private static byte? TryGetSemanticEventCode(PhotonEvent photonEvent)
+    private static ushort? TryGetSemanticEventCode(PhotonEvent photonEvent)
     {
         if (!photonEvent.Parameters.TryGetValue(SemanticEventCodeParameterKey, out var value) || value is null)
         {
@@ -81,6 +81,6 @@ public class RawEventRecorder : IRawEventRecorder
         }
 
         var numeric = Convert.ToInt64(value);
-        return numeric is >= byte.MinValue and <= byte.MaxValue ? (byte)numeric : null;
+        return numeric is >= ushort.MinValue and <= ushort.MaxValue ? (ushort)numeric : null;
     }
 }

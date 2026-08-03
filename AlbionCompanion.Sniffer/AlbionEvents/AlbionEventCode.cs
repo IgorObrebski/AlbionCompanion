@@ -5,7 +5,7 @@ namespace AlbionCompanion.Sniffer.AlbionEvents;
 // mapping, which was confirmed stale: a real gathering capture never produced any of its
 // HarvestStart/HarvestFinished/UpdateFame codes). Extend/correct as more codes are confirmed
 // against real debug_packets.log captures.
-public enum AlbionEventCode : byte
+public enum AlbionEventCode : ushort
 {
     Leave = 1, // Unconfirmed: fires as often as Move in captures, which is suspicious for a "player left view" event - verify before relying on it.
     JoinFinished = 2,
@@ -24,4 +24,8 @@ public enum AlbionEventCode : byte
     ChatMessage = 73,
     UpdateMoney = 81,
     UpdateFame = 82,
+    // Unconfirmed name - a periodic broadcast pairing (entityId, nickname) for any nearby
+    // player (not self-only, confirmed live 2026-08-03: two different nicknames seen for two
+    // different entities in one capture window). See LocalPlayerTracker for how this is used.
+    PlayerAnnounce = 279,
 }

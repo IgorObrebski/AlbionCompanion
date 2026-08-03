@@ -9,7 +9,7 @@ public class RawGatheringEvent
     public Guid? SessionId { get; set; }
     public GatheringSession? Session { get; set; }
     public byte PhotonCode { get; set; }
-    public byte? SemanticEventCode { get; set; }
+    public ushort? SemanticEventCode { get; set; }
     // Human-readable name for SemanticEventCode (e.g. "HarvestFinished" for 61), resolved from
     // AlbionCompanion.Sniffer.AlbionEvents.AlbionEventCode at write time - added so anyone
     // browsing this table doesn't have to memorize/cross-reference magic numbers. Null when the
