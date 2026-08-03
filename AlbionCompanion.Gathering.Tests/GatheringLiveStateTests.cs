@@ -34,6 +34,8 @@ public class GatheringLiveStateTests
     private static int AmountFor(IGatheringLiveState liveState, string itemId, string location = "") =>
         liveState.ItemTotals.Single(t => t.ItemId == itemId && t.Location == location).Amount;
 
+    private static readonly Guid TestCharacterId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
     [Fact]
     public async Task OnItemAdded_NewItem_AppearsInItemTotals()
     {
@@ -184,7 +186,7 @@ public class GatheringLiveStateTests
         {
             SnapshotToReturn = new ActiveSessionSnapshot(
                 CurrentLocation: "Cairn Camain",
-                CharacterId: null,
+                CharacterId: TestCharacterId,
                 TotalFameEarned: 150,
                 TotalSilverEarned: 500,
                 ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) },
@@ -222,7 +224,7 @@ public class GatheringLiveStateTests
         {
             SnapshotToReturn = new ActiveSessionSnapshot(
                 CurrentLocation: "Cairn Camain",
-                CharacterId: null,
+                CharacterId: TestCharacterId,
                 TotalFameEarned: 150,
                 TotalSilverEarned: 500,
                 ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) },
@@ -236,5 +238,53 @@ public class GatheringLiveStateTests
 
         Assert.Equal(13, AmountFor(liveState, "T4_ORE", "Cairn Camain"));
         Assert.Equal(165, liveState.TotalFame);
+    }
+
+    [Fact]
+    public async Task Attach_WithAlreadyActiveSession_RehydratesCharacterId()
+    {
+        var liveState = new GatheringLiveState();
+        var service = new FakeGatheringSessionService
+        {
+            SnapshotToReturn = new ActiveSessionSnapshot(
+                CurrentLocation: "Cairn Camain",
+                CharacterId: TestCharacterId,
+                TotalFameEarned: 150,
+                TotalSilverEarned: 500,
+                ItemTotals: Array.Empty<ItemLocationTotal>(),
+                FameByLocation: Array.Empty<LocationTotal>(),
+                SilverByLocation: Array.Empty<LocationTotal>()),
+        };
+
+        await liveState.Attach(service);
+
+        Assert.Equal(TestCharacterId, liveState.CharacterId);
+    }
+
+    [Fact]
+    public async Task OnSessionStarted_SetsCharacterId()
+    {
+        var liveState = new GatheringLiveState();
+        var service = new FakeGatheringSessionService();
+        await liveState.Attach(service);
+
+        service.RaiseSessionStarted(new GatheringSession { StartLocation = "Martlock", CharacterId = TestCharacterId });
+
+        Assert.Equal(TestCharacterId, liveState.CharacterId);
+    }
+
+    [Fact]
+    public async Task OnSessionStarted_RaisesPassthroughEventWithTheNewSession()
+    {
+        var liveState = new GatheringLiveState();
+        var service = new FakeGatheringSessionService();
+        await liveState.Attach(service);
+        GatheringSession? raised = null;
+        liveState.OnSessionStarted += (_, session) => raised = session;
+
+        service.RaiseSessionStarted(new GatheringSession { StartLocation = "Martlock", CharacterId = TestCharacterId });
+
+        Assert.NotNull(raised);
+        Assert.Equal(TestCharacterId, raised!.CharacterId);
     }
 }

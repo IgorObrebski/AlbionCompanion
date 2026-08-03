@@ -1,3 +1,5 @@
+using AlbionCompanion.Core.Models;
+
 namespace AlbionCompanion.Gathering;
 
 public class GatheringLiveState : IGatheringLiveState
@@ -15,6 +17,7 @@ public class GatheringLiveState : IGatheringLiveState
     private bool _isActive;
     private string? _startLocation;
     private string? _currentLocation;
+    private Guid? _characterId;
     private int _totalFame;
     private int _totalSilver;
 
@@ -31,6 +34,11 @@ public class GatheringLiveState : IGatheringLiveState
     public string? CurrentLocation
     {
         get { lock (_lock) { return _currentLocation; } }
+    }
+
+    public Guid? CharacterId
+    {
+        get { lock (_lock) { return _characterId; } }
     }
 
     public int TotalFame
@@ -77,6 +85,7 @@ public class GatheringLiveState : IGatheringLiveState
     }
 
     public event EventHandler? OnChanged;
+    public event EventHandler<GatheringSession>? OnSessionStarted;
 
     public async Task Attach(IGatheringSessionService sessionService)
     {
@@ -96,6 +105,7 @@ public class GatheringLiveState : IGatheringLiveState
                 _isActive = true;
                 _startLocation = snapshot.CurrentLocation;
                 _currentLocation = snapshot.CurrentLocation;
+                _characterId = snapshot.CharacterId;
                 _totalFame = snapshot.TotalFameEarned;
                 _totalSilver = snapshot.TotalSilverEarned;
                 foreach (var total in snapshot.ItemTotals)
@@ -126,9 +136,23 @@ public class GatheringLiveState : IGatheringLiveState
                 _totalSilver = 0;
                 _startLocation = session.StartLocation;
                 _currentLocation = session.StartLocation;
+                _characterId = session.CharacterId;
                 _isActive = true;
             }
         });
+
+        sessionService.OnSessionStarted += (_, session) =>
+        {
+            try
+            {
+                OnSessionStarted?.Invoke(this, session);
+            }
+            catch
+            {
+                // Same boundary rule as Safely() below - a failing UI subscriber must never
+                // destabilize the gathering pipeline this event also drives.
+            }
+        };
 
         sessionService.OnSessionEnded += (_, _) => Safely(() =>
         {
