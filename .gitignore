@@ -45,3 +45,6 @@ Thumbs.db
 
 ## Debug screenshots
 specs/*.png
+
+## Git worktrees (subagent-driven-development scratch workspaces)
+.worktrees/
