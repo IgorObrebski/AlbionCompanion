@@ -1,0 +1,79 @@
+@using AlbionCompanion.Core.Models
+@using AlbionCompanion.Gathering
+@inject IGatheringLiveState LiveState
+@inject ICharacterService CharacterService
+@implements IDisposable
+
+@if (_visible && _characterId is not null && _characterName is not null)
+{
+    <div class="ac-toast">
+        <span>Session started for <strong>@_characterName</strong></span>
+        <a class="ac-toast-link" href="@($"/characters/{_characterId}/broadcast")">View</a>
+        <button class="ac-toast-close" @onclick="Dismiss">✕</button>
+    </div>
+}
+
+@code {
+    private bool _visible;
+    private Guid? _characterId;
+    private string? _characterName;
+    private CancellationTokenSource? _autoHide;
+
+    protected override void OnInitialized()
+    {
+        LiveState.OnSessionStarted += HandleSessionStarted;
+    }
+
+    // Skips the toast entirely when the session has no resolved character (an unregistered
+    // character's name, or no zone-join/PlayerAnnounce match yet) - there's nowhere useful to
+    // link the user to yet.
+    private void HandleSessionStarted(object? sender, GatheringSession session)
+    {
+        if (session.CharacterId is not { } characterId)
+        {
+            return;
+        }
+
+        _ = ShowAsync(characterId);
+    }
+
+    private async Task ShowAsync(Guid characterId)
+    {
+        var overview = await CharacterService.GetOverviewAsync(characterId);
+        if (overview is null)
+        {
+            return;
+        }
+
+        _characterId = characterId;
+        _characterName = overview.Name;
+        _visible = true;
+        await InvokeAsync(StateHasChanged);
+
+        _autoHide?.Cancel();
+        var cts = new CancellationTokenSource();
+        _autoHide = cts;
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(8), cts.Token);
+            _visible = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+            // Dismiss() cancelled the auto-hide timer - nothing more to do.
+        }
+    }
+
+    private void Dismiss()
+    {
+        _autoHide?.Cancel();
+        _visible = false;
+    }
+
+    public void Dispose()
+    {
+        LiveState.OnSessionStarted -= HandleSessionStarted;
+        _autoHide?.Cancel();
+    }
+}
