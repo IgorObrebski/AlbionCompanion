@@ -228,4 +228,39 @@ public class SessionHistoryServiceTests
 
         Assert.Null(result);
     }
+
+    [Fact]
+    public async Task GetCompletedSessionsAsync_FilteredByCharacterId_ReturnsOnlyThatCharactersSessions()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection);
+        var characterA = Guid.NewGuid();
+        var characterB = Guid.NewGuid();
+        context.Characters.Add(new Character { Id = characterA, Name = "Ejnsztain", CreatedAt = DateTime.UtcNow });
+        context.Characters.Add(new Character { Id = characterB, Name = "Valdekir", CreatedAt = DateTime.UtcNow });
+        context.GatheringSessions.Add(new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "Martlock", EndTime = DateTime.UtcNow, CharacterId = characterA });
+        context.GatheringSessions.Add(new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "Lymhurst", EndTime = DateTime.UtcNow, CharacterId = characterB });
+        await context.SaveChangesAsync();
+
+        var result = await service.GetCompletedSessionsAsync(new SessionQuery(CharacterId: characterA));
+
+        Assert.Single(result.Items);
+        Assert.Equal("Martlock", result.Items[0].StartLocation);
+        Assert.Equal("Ejnsztain", result.Items[0].CharacterName);
+    }
+
+    [Fact]
+    public async Task GetCompletedSessionsAsync_SessionWithNoCharacter_ProjectsUnknown()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection);
+        context.GatheringSessions.Add(new GatheringSession { StartTime = DateTime.UtcNow, StartLocation = "Martlock", EndTime = DateTime.UtcNow, CharacterId = null });
+        await context.SaveChangesAsync();
+
+        var result = await service.GetCompletedSessionsAsync(new SessionQuery());
+
+        Assert.Equal("Unknown", result.Items[0].CharacterName);
+    }
 }

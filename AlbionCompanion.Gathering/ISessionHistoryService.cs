@@ -18,6 +18,7 @@ public record SessionQuery(
     int Page = 1,
     int PageSize = 20,
     string? LocationFilter = null,
+    Guid? CharacterId = null,
     SessionSortColumn SortBy = SessionSortColumn.StartTime,
     bool SortDescending = true);
 
@@ -33,7 +34,8 @@ public record SessionSummary(
     string StartLocation,
     IReadOnlyList<string> Locations,
     int TotalFameEarned,
-    int TotalItemsCollected);
+    int TotalItemsCollected,
+    string CharacterName);
 
 public record SessionDetail(
     Guid Id,

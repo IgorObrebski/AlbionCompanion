@@ -18,6 +18,11 @@ public class SessionHistoryService : ISessionHistoryService
 
         var filtered = dbContext.GatheringSessions.Where(s => s.EndTime != null);
 
+        if (query.CharacterId is { } characterId)
+        {
+            filtered = filtered.Where(s => s.CharacterId == characterId);
+        }
+
         if (!string.IsNullOrWhiteSpace(query.LocationFilter))
         {
             filtered = filtered.Where(s => EF.Functions.Like(s.StartLocation, $"%{query.LocationFilter}%"));
@@ -57,6 +62,7 @@ public class SessionHistoryService : ISessionHistoryService
             .Include(s => s.GatheredItems)
             .Include(s => s.FameLogs)
             .Include(s => s.SilverLogs)
+            .Include(s => s.Character)
             .ToListAsync();
 
         var items = pageEntities
@@ -71,7 +77,8 @@ public class SessionHistoryService : ISessionHistoryService
                     s.FameLogs.Select(f => f.Location),
                     s.SilverLogs.Select(silver => silver.Location)),
                 s.TotalFameEarned,
-                s.GatheredItems.Sum(i => i.Amount)))
+                s.GatheredItems.Sum(i => i.Amount),
+                s.Character?.Name ?? "Unknown"))
             .ToList();
 
         return new PagedResult<SessionSummary>(items, totalCount, page, pageSize);
