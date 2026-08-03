@@ -7,10 +7,14 @@ namespace AlbionCompanion.Gathering;
 public class GatheringSessionService : IGatheringSessionService
 {
     private readonly AppDbContext _dbContext;
+    private readonly ILocalPlayerTracker _localPlayerTracker;
+    private readonly ICharacterService _characterService;
 
-    public GatheringSessionService(AppDbContext dbContext)
+    public GatheringSessionService(AppDbContext dbContext, ILocalPlayerTracker localPlayerTracker, ICharacterService characterService)
     {
         _dbContext = dbContext;
+        _localPlayerTracker = localPlayerTracker;
+        _characterService = characterService;
     }
 
     public event EventHandler<GatheringSession>? OnSessionStarted;
@@ -51,6 +55,7 @@ public class GatheringSessionService : IGatheringSessionService
 
         return new ActiveSessionSnapshot(
             session.CurrentLocation,
+            session.CharacterId,
             session.TotalFameEarned,
             session.TotalSilverEarned,
             itemTotals,
@@ -85,6 +90,7 @@ public class GatheringSessionService : IGatheringSessionService
             StartTime = DateTime.UtcNow,
             StartLocation = location,
             CurrentLocation = location,
+            CharacterId = await ResolveCharacterIdAsync(),
         };
         _dbContext.GatheringSessions.Add(session);
 
@@ -186,5 +192,16 @@ public class GatheringSessionService : IGatheringSessionService
 
         await _dbContext.SaveChangesAsync();
         OnSilverAdded?.Invoke(this, silverLog);
+    }
+
+    private async Task<Guid?> ResolveCharacterIdAsync()
+    {
+        if (_localPlayerTracker.CurrentCharacterName is not { } name)
+        {
+            return null;
+        }
+
+        var characters = await _characterService.GetAllAsync();
+        return characters.FirstOrDefault(c => c.Name == name)?.Id;
     }
 }

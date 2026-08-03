@@ -18,6 +18,22 @@ public class RawEventRecorderTests
         public void RaiseEvent(PhotonEvent photonEvent) => OnEventReceived?.Invoke(this, photonEvent);
     }
 
+    private sealed class FakeLocalPlayerTracker : ILocalPlayerTracker
+    {
+        public int? CurrentEntityId { get; set; }
+        public string? CurrentCharacterName { get; set; }
+        public event EventHandler<Exception>? OnError;
+    }
+
+    private sealed class FakeCharacterService : ICharacterService
+    {
+        public Task<IReadOnlyList<Character>> GetAllAsync() => Task.FromResult<IReadOnlyList<Character>>(Array.Empty<Character>());
+        public Task<Character> AddAsync(string name) => throw new NotImplementedException();
+        public Task DeleteAsync(Guid id) => throw new NotImplementedException();
+        public Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync() => throw new NotImplementedException();
+        public Task<CharacterOverview?> GetOverviewAsync(Guid characterId) => throw new NotImplementedException();
+    }
+
     private sealed class SingleConnectionDbContextFactory : IDbContextFactory<AppDbContext>
     {
         private readonly DbContextOptions<AppDbContext> _options;
@@ -37,7 +53,7 @@ public class RawEventRecorderTests
         var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options;
         var context = new AppDbContext(options);
         context.Database.EnsureCreated();
-        var service = new GatheringSessionService(context);
+        var service = new GatheringSessionService(context, new FakeLocalPlayerTracker(), new FakeCharacterService());
         var factory = new SingleConnectionDbContextFactory(connection);
         return (service, context, factory);
     }
@@ -229,7 +245,7 @@ public class RawEventRecorderTests
         var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options;
         var sharedContext = new BlockingSaveDbContext(options);
         sharedContext.Database.EnsureCreated();
-        var sharedService = new GatheringSessionService(sharedContext);
+        var sharedService = new GatheringSessionService(sharedContext, new FakeLocalPlayerTracker(), new FakeCharacterService());
         var factory = new SingleConnectionDbContextFactory(connection);
         var parser = new FakePhotonParser();
         var recorder = new RawEventRecorder(parser, factory);

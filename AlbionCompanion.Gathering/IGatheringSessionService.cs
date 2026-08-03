@@ -26,6 +26,7 @@ public interface IGatheringSessionService
 // OnSessionStarted for a session that already existed before this process started).
 public record ActiveSessionSnapshot(
     string CurrentLocation,
+    Guid? CharacterId,
     int TotalFameEarned,
     int TotalSilverEarned,
     IReadOnlyList<ItemLocationTotal> ItemTotals,

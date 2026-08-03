@@ -184,6 +184,7 @@ public class GatheringLiveStateTests
         {
             SnapshotToReturn = new ActiveSessionSnapshot(
                 CurrentLocation: "Cairn Camain",
+                CharacterId: null,
                 TotalFameEarned: 150,
                 TotalSilverEarned: 500,
                 ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) },
@@ -221,6 +222,7 @@ public class GatheringLiveStateTests
         {
             SnapshotToReturn = new ActiveSessionSnapshot(
                 CurrentLocation: "Cairn Camain",
+                CharacterId: null,
                 TotalFameEarned: 150,
                 TotalSilverEarned: 500,
                 ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) },

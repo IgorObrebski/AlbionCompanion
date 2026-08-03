@@ -1,4 +1,5 @@
 using AlbionCompanion.Core.Data;
+using AlbionCompanion.Core.Models;
 using AlbionCompanion.Sniffer.Protocol16;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -37,12 +38,28 @@ public class ZoneTrackerTests
         [4213] = new ZoneInfo("Cairn Camain", "OPENPVP_YELLOW"),
     };
 
+    private sealed class FakeLocalPlayerTracker : ILocalPlayerTracker
+    {
+        public int? CurrentEntityId { get; set; }
+        public string? CurrentCharacterName { get; set; }
+        public event EventHandler<Exception>? OnError;
+    }
+
+    private sealed class FakeCharacterService : ICharacterService
+    {
+        public Task<IReadOnlyList<Character>> GetAllAsync() => Task.FromResult<IReadOnlyList<Character>>(Array.Empty<Character>());
+        public Task<Character> AddAsync(string name) => throw new NotImplementedException();
+        public Task DeleteAsync(Guid id) => throw new NotImplementedException();
+        public Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync() => throw new NotImplementedException();
+        public Task<CharacterOverview?> GetOverviewAsync(Guid characterId) => throw new NotImplementedException();
+    }
+
     private static GatheringSessionService CreateService(SqliteConnection connection)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options;
         var context = new AppDbContext(options);
         context.Database.EnsureCreated();
-        return new GatheringSessionService(context);
+        return new GatheringSessionService(context, new FakeLocalPlayerTracker(), new FakeCharacterService());
     }
 
     private static PhotonResponse ZoneResponse(int zoneId) =>

@@ -16,13 +16,42 @@ public class GatheringSessionServiceTests
         return context;
     }
 
+    private sealed class FakeLocalPlayerTracker : ILocalPlayerTracker
+    {
+        public int? CurrentEntityId { get; set; }
+        public string? CurrentCharacterName { get; set; }
+        public event EventHandler<Exception>? OnError;
+    }
+
+    private sealed class FakeCharacterService : ICharacterService
+    {
+        private readonly List<Character> _characters = new();
+
+        public Task<IReadOnlyList<Character>> GetAllAsync() => Task.FromResult<IReadOnlyList<Character>>(_characters);
+
+        public Task<Character> AddAsync(string name)
+        {
+            var character = new Character { Name = name, CreatedAt = DateTime.UtcNow };
+            _characters.Add(character);
+            return Task.FromResult(character);
+        }
+
+        public Task DeleteAsync(Guid id) => throw new NotImplementedException();
+        public Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync() => throw new NotImplementedException();
+        public Task<CharacterOverview?> GetOverviewAsync(Guid characterId) => throw new NotImplementedException();
+    }
+
+    private static GatheringSessionService CreateService(
+        AppDbContext context, ILocalPlayerTracker? localPlayerTracker = null, ICharacterService? characterService = null) =>
+        new(context, localPlayerTracker ?? new FakeLocalPlayerTracker(), characterService ?? new FakeCharacterService());
+
     [Fact]
     public async Task StartSessionAsync_CreatesOpenSession()
     {
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
 
         await service.StartSessionAsync("Martlock");
 
@@ -38,7 +67,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
 
         await service.StartSessionAsync("Martlock");
         await service.StartSessionAsync("Bridgewatch");
@@ -59,7 +88,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
 
         await service.StartSessionAsync("Martlock");
         await service.StartSessionAsync("Bridgewatch");
@@ -75,7 +104,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
 
         await service.StartSessionAsync("Martlock");
 
@@ -89,7 +118,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         await service.StartSessionAsync("Martlock");
         await service.AddItemAsync("T4_ORE", 5);
 
@@ -105,7 +134,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         await service.StartSessionAsync("Martlock");
 
         await service.EndSessionAsync();
@@ -119,7 +148,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
 
         await service.EndSessionAsync();
 
@@ -132,7 +161,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
 
         await service.AddItemAsync("T4_ORE", 5);
 
@@ -145,7 +174,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         await service.StartSessionAsync("Martlock");
 
         await service.AddFameAsync("Gathering", 300);
@@ -162,7 +191,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         GatheringSession? raised = null;
         service.OnSessionStarted += (_, session) => raised = session;
 
@@ -178,7 +207,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         await service.StartSessionAsync("Martlock");
         var raiseCount = 0;
         service.OnSessionStarted += (_, _) => raiseCount++;
@@ -194,7 +223,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         await service.StartSessionAsync("Martlock");
         await service.AddItemAsync("T4_ORE", 5);
         GatheringSession? raised = null;
@@ -212,7 +241,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         await service.StartSessionAsync("Martlock");
         var raiseCount = 0;
         service.OnSessionEnded += (_, _) => raiseCount++;
@@ -228,7 +257,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         var raiseCount = 0;
         service.OnSessionEnded += (_, _) => raiseCount++;
 
@@ -243,7 +272,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         await service.StartSessionAsync("Martlock");
         GatheredItem? raised = null;
         service.OnItemAdded += (_, item) => raised = item;
@@ -261,7 +290,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         var raiseCount = 0;
         service.OnItemAdded += (_, _) => raiseCount++;
 
@@ -276,7 +305,7 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         await service.StartSessionAsync("Martlock");
         FameLog? raised = null;
         service.OnFameAdded += (_, fameLog) => raised = fameLog;
@@ -294,12 +323,61 @@ public class GatheringSessionServiceTests
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         using var context = CreateInMemoryContext(connection);
-        var service = new GatheringSessionService(context);
+        var service = CreateService(context);
         var raiseCount = 0;
         service.OnFameAdded += (_, _) => raiseCount++;
 
         await service.AddFameAsync("Gathering", 300);
 
         Assert.Equal(0, raiseCount);
+    }
+
+    [Fact]
+    public async Task StartSessionAsync_WithKnownCharacterName_ResolvesCharacterId()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+        var characterService = new FakeCharacterService();
+        var character = await characterService.AddAsync("Ejnsztain");
+        // Also save to the database context so the foreign key constraint is satisfied
+        context.Characters.Add(character);
+        await context.SaveChangesAsync();
+        var localPlayerTracker = new FakeLocalPlayerTracker { CurrentCharacterName = "Ejnsztain" };
+        var service = CreateService(context, localPlayerTracker, characterService);
+
+        await service.StartSessionAsync("Martlock");
+
+        var active = await service.GetActiveSessionAsync();
+        Assert.Equal(character.Id, active!.CharacterId);
+    }
+
+    [Fact]
+    public async Task StartSessionAsync_WithUnregisteredCharacterName_LeavesCharacterIdNull()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+        var localPlayerTracker = new FakeLocalPlayerTracker { CurrentCharacterName = "SomeoneNotRegistered" };
+        var service = CreateService(context, localPlayerTracker, new FakeCharacterService());
+
+        await service.StartSessionAsync("Martlock");
+
+        var active = await service.GetActiveSessionAsync();
+        Assert.Null(active!.CharacterId);
+    }
+
+    [Fact]
+    public async Task StartSessionAsync_WithNoKnownCharacterName_LeavesCharacterIdNull()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+        var service = CreateService(context);
+
+        await service.StartSessionAsync("Martlock");
+
+        var active = await service.GetActiveSessionAsync();
+        Assert.Null(active!.CharacterId);
     }
 }

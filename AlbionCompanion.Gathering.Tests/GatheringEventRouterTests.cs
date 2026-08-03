@@ -25,6 +25,15 @@ public class GatheringEventRouterTests
         public event EventHandler<Exception>? OnError;
     }
 
+    private sealed class FakeCharacterService : ICharacterService
+    {
+        public Task<IReadOnlyList<Character>> GetAllAsync() => Task.FromResult<IReadOnlyList<Character>>(Array.Empty<Character>());
+        public Task<Character> AddAsync(string name) => throw new NotImplementedException();
+        public Task DeleteAsync(Guid id) => throw new NotImplementedException();
+        public Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync() => throw new NotImplementedException();
+        public Task<CharacterOverview?> GetOverviewAsync(Guid characterId) => throw new NotImplementedException();
+    }
+
     private sealed class FakeItemDictionaryService : IItemDictionaryService
     {
         private readonly Dictionary<int, ItemDictionary> _byIndex;
@@ -51,7 +60,7 @@ public class GatheringEventRouterTests
         var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options;
         var context = new AppDbContext(options);
         context.Database.EnsureCreated();
-        var service = new GatheringSessionService(context);
+        var service = new GatheringSessionService(context, new FakeLocalPlayerTracker(), new FakeCharacterService());
         return (service, context);
     }
 
