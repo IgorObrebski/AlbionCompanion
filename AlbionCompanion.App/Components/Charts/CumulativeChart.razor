@@ -1,0 +1,70 @@
+@* Single-series line chart: cumulative sum of one metric (fame or items) over the session's
+   wall-clock duration. One axis only - fame and items have different scales, so each metric gets
+   its own small chart rather than a dual-axis combo. *@
+@using AlbionCompanion.Gathering
+
+<div class="ac-chart-card">
+    <div class="ac-chart-title">@Title</div>
+
+    @if (Events.Count == 0)
+    {
+        <p class="ac-chart-empty">No @ValueLabel.ToLowerInvariant() recorded.</p>
+    }
+    else
+    {
+        <ApexChart TItem="TimePoint" Options="_options" Height="220">
+            <ApexPointSeries TItem="TimePoint"
+                             Items="_points"
+                             Name="@ValueLabel"
+                             SeriesType="SeriesType.Area"
+                             XValue="p => p.Timestamp"
+                             YValue="p => (decimal)p.Cumulative" />
+        </ApexChart>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TimelineEvent> Events { get; set; } = Array.Empty<TimelineEvent>();
+
+    [Parameter, EditorRequired]
+    public DateTime SessionStart { get; set; }
+
+    [Parameter, EditorRequired]
+    public DateTime SessionEnd { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = "Cumulative";
+
+    [Parameter]
+    public string ValueLabel { get; set; } = "Value";
+
+    private record TimePoint(DateTime Timestamp, int Cumulative);
+
+    private List<TimePoint> _points = new();
+
+    private readonly ApexChartOptions<TimePoint> _options = new()
+    {
+        Chart = new Chart { Toolbar = new Toolbar { Show = false }, Background = "transparent" },
+        Theme = new ApexCharts.Theme { Mode = Mode.Dark },
+        Colors = new List<string> { "#3987e5" },
+        Stroke = new Stroke { Curve = Curve.Smooth, Width = 2 },
+        Fill = new Fill { Opacity = new Opacity(0.1) },
+        Xaxis = new XAxis { Type = XAxisType.Datetime },
+        Markers = new Markers { Size = 4 },
+    };
+
+    protected override void OnParametersSet()
+    {
+        var running = 0;
+        var points = new List<TimePoint> { new(SessionStart, 0) };
+        foreach (var e in Events)
+        {
+            running += e.Amount;
+            points.Add(new TimePoint(e.Timestamp, running));
+        }
+        points.Add(new TimePoint(SessionEnd, running));
+
+        _points = points;
+    }
+}

@@ -63,6 +63,23 @@ namespace AlbionCompanion.Gathering;
 // recorded two other players' harvest swings on different resource types alongside the player's
 // own). Parameter 0 is the harvesting character's own entity id, checked against
 // ILocalPlayerTracker.CurrentEntityId.
+//
+// Silver gain: UpdateMoney (code 81) confirmed via live capture on 2026-08-03, auto-looted silver
+// from a mob kill. Unlike UpdateFame, there is no separate delta parameter - parameter 1 is only
+// the account's running total silver balance (scaled 10000x, same convention as fame), confirmed
+// by cross-referencing two live samples against the player's own in-game silver display: total
+// 2504384241 -> displayed 250438, then 2505306831 -> displayed 250530 after a second kill (delta
+// 922590 / 10000 = 92.26, matching the real +92 gain to within the same small fractional residue
+// both raw samples showed against their own displayed integer - the game's internal ledger
+// apparently keeps sub-silver precision the UI truncates, not a decoding error). Delta is computed
+// here by diffing against the last-seen raw total (_lastKnownSilverTotal) rather than trusting a
+// wire-provided delta, since none exists. The very first sighting only seeds the baseline - it
+// can't have a "delta" against nothing without wrongly reporting the player's entire prior wealth
+// as a single gain from this session. Parameter 0 (actor entity id) is filtered the same way as
+// HarvestFinished/UpdateFame; confirmed the entity id can differ across the two samples above
+// (2861 -> 41390, a zone-transition entity-id reset - same class of behavior LocalPlayerTracker
+// already handles), so the running-total baseline is intentionally NOT reset just because a given
+// reading's actor didn't match - only skip that one reading, keep the last confirmed baseline.
 public class GatheringEventRouter
 {
     private const byte SemanticEventCodeParameterKey = 252;
@@ -74,6 +91,11 @@ public class GatheringEventRouter
     private const byte FameDeltaParameterKey = 2;
     private const int FameScaleFactor = 10000;
     private const string GatheringFameType = "Gathering";
+    private const byte SilverActorEntityIdParameterKey = 0;
+    private const byte SilverTotalParameterKey = 1;
+    private const int SilverScaleFactor = 10000;
+
+    private long? _lastKnownSilverTotal;
 
     private readonly IGatheringSessionService _sessionService;
     private readonly ILocalPlayerTracker _localPlayerTracker;
@@ -128,6 +150,10 @@ public class GatheringEventRouter
             else if (semanticCode == (byte)AlbionEventCode.UpdateFame)
             {
                 await HandleUpdateFameAsync(photonEvent);
+            }
+            else if (semanticCode == (byte)AlbionEventCode.UpdateMoney)
+            {
+                await HandleUpdateMoneyAsync(photonEvent);
             }
         }
         catch (Exception ex)
@@ -210,6 +236,48 @@ public class GatheringEventRouter
 
         var fameAmount = Convert.ToInt32(fameDeltaValue) / FameScaleFactor;
         await _sessionService.AddFameAsync(GatheringFameType, fameAmount);
+    }
+
+    private async Task HandleUpdateMoneyAsync(PhotonEvent photonEvent)
+    {
+        if (!photonEvent.Parameters.TryGetValue(SilverActorEntityIdParameterKey, out var actorIdValue) || actorIdValue is null)
+        {
+            return;
+        }
+
+        if (_localPlayerTracker.CurrentEntityId is not { } localEntityId || Convert.ToInt32(actorIdValue) != localEntityId)
+        {
+            return;
+        }
+
+        if (!photonEvent.Parameters.TryGetValue(SilverTotalParameterKey, out var totalValue) || totalValue is null)
+        {
+            return;
+        }
+
+        var rawTotal = Convert.ToInt64(totalValue);
+
+        if (_lastKnownSilverTotal is not { } lastTotal)
+        {
+            _lastKnownSilverTotal = rawTotal;
+            return;
+        }
+
+        _lastKnownSilverTotal = rawTotal;
+
+        var delta = rawTotal - lastTotal;
+        if (delta <= 0)
+        {
+            return;
+        }
+
+        var silverAmount = (int)(delta / SilverScaleFactor);
+        if (silverAmount <= 0)
+        {
+            return;
+        }
+
+        await _sessionService.AddSilverAsync(silverAmount);
     }
 
     private async Task<string> ResolveItemIdAsync(int itemIndex)

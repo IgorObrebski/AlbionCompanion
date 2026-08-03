@@ -1,5 +1,6 @@
 using AlbionCompanion.Core.Data;
 using AlbionCompanion.Gathering;
+using ApexCharts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -23,6 +24,7 @@ public static class MauiProgram
             });
 
         builder.Services.AddMauiBlazorWebView();
+        builder.Services.AddApexCharts();
         builder.Services.AddSingleton<IGatheringLiveState, GatheringLiveState>();
         builder.Services.AddSingleton<ISessionHistoryService>(_ =>
             new SessionHistoryService(GatheringProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>()));

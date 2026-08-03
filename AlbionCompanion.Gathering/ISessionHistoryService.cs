@@ -31,6 +31,7 @@ public record SessionSummary(
     DateTime StartTime,
     DateTime EndTime,
     string StartLocation,
+    IReadOnlyList<string> Locations,
     int TotalFameEarned,
     int TotalItemsCollected);
 
@@ -40,4 +41,14 @@ public record SessionDetail(
     DateTime EndTime,
     string StartLocation,
     int TotalFameEarned,
-    IReadOnlyList<ItemLocationTotal> ItemTotals);
+    int TotalSilverEarned,
+    IReadOnlyList<ItemLocationTotal> ItemTotals,
+    IReadOnlyList<LocationTotal> FameByLocation,
+    IReadOnlyList<LocationTotal> SilverByLocation,
+    IReadOnlyList<TimelineEvent> FameTimeline,
+    IReadOnlyList<TimelineEvent> ItemTimeline,
+    IReadOnlyList<TimelineEvent> SilverTimeline);
+
+// One earned-thing's timestamp and amount, in chronological order - the raw material for a
+// cumulative-over-time chart (SessionDetail only kept aggregated totals before this).
+public record TimelineEvent(DateTime Timestamp, int Amount);

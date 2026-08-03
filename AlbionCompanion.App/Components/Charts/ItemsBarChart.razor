@@ -1,0 +1,67 @@
+@* Vertical bar chart: one bar per distinct item (summed across every location it was gathered
+   in), x-axis = display name, y-axis = amount. Single-series magnitude, so a single hue - identity
+   of *which* item is already carried by the x-axis label, not by color. *@
+@using AlbionCompanion.Core.Models
+@using AlbionCompanion.Gathering
+@inject IItemDictionaryService ItemDictionary
+
+<div class="ac-chart-card">
+    <div class="ac-chart-title">@Title</div>
+
+    @if (_rows.Count == 0)
+    {
+        <p class="ac-chart-empty">No items to chart.</p>
+    }
+    else
+    {
+        <ApexChart TItem="ItemBar" Options="_options" Height="280">
+            <ApexPointSeries TItem="ItemBar"
+                             Items="_rows"
+                             Name="Amount"
+                             SeriesType="SeriesType.Bar"
+                             XValue="row => row.Label"
+                             YValue="row => (decimal)row.Amount" />
+        </ApexChart>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ItemLocationTotal> Items { get; set; } = Array.Empty<ItemLocationTotal>();
+
+    [Parameter]
+    public string Title { get; set; } = "Items gathered";
+
+    private record ItemBar(string Label, int Amount);
+
+    private IReadOnlyDictionary<string, ItemDictionary> _displayNames = new Dictionary<string, ItemDictionary>();
+    private IReadOnlyList<ItemLocationTotal>? _lookedUpFor;
+    private List<ItemBar> _rows = new();
+
+    private readonly ApexChartOptions<ItemBar> _options = new()
+    {
+        Chart = new Chart { Toolbar = new Toolbar { Show = false }, Background = "transparent" },
+        Theme = new ApexCharts.Theme { Mode = Mode.Dark },
+        Colors = new List<string> { "#3987e5" },
+        PlotOptions = new PlotOptions { Bar = new PlotOptionsBar { BorderRadius = 4, ColumnWidth = "60%" } },
+        DataLabels = new DataLabels { Enabled = true },
+        Xaxis = new XAxis { Labels = new XAxisLabels { Rotate = -35 } },
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!ReferenceEquals(_lookedUpFor, Items))
+        {
+            _displayNames = await ItemDictionary.GetItemsByIdAsync(Items.Select(t => t.ItemId).Distinct());
+            _lookedUpFor = Items;
+        }
+
+        _rows = Items
+            .GroupBy(t => t.ItemId)
+            .Select(g => new ItemBar(
+                _displayNames.TryGetValue(g.Key, out var entry) ? entry.DisplayNameEN : g.Key,
+                g.Sum(t => t.Amount)))
+            .OrderByDescending(r => r.Amount)
+            .ToList();
+    }
+}

@@ -1,0 +1,63 @@
+@* Donut chart: one metric (fame or items) broken down by location within a session. Part-to-whole
+   at a glance - reused for both the fame-by-location and items-by-location breakdowns, since both
+   are just "one number per location" (LocationTotal). *@
+@using AlbionCompanion.Gathering
+
+<div class="ac-chart-card">
+    <div class="ac-chart-title">@Title</div>
+
+    @if (Locations.Count == 0)
+    {
+        <p class="ac-chart-empty">No location breakdown to chart.</p>
+    }
+    else
+    {
+        <ApexChart TItem="LocationSlice" Options="_options" Height="280">
+            <ApexPointSeries TItem="LocationSlice"
+                             Items="_rows"
+                             Name="@ValueLabel"
+                             SeriesType="SeriesType.Donut"
+                             XValue="row => row.Location"
+                             YValue="row => (decimal)row.Amount" />
+        </ApexChart>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<LocationTotal> Locations { get; set; } = Array.Empty<LocationTotal>();
+
+    [Parameter]
+    public string Title { get; set; } = "By location";
+
+    [Parameter]
+    public string ValueLabel { get; set; } = "Amount";
+
+    private record LocationSlice(string Location, int Amount);
+
+    // Same fixed-order categorical hues used elsewhere in the app, validated with the dataviz
+    // skill's validate_palette.js against this app's dark surface.
+    private static readonly List<string> CategoricalColors =
+    [
+        "#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767",
+    ];
+
+    private List<LocationSlice> _rows = new();
+
+    private readonly ApexChartOptions<LocationSlice> _options = new()
+    {
+        Chart = new Chart { Toolbar = new Toolbar { Show = false }, Background = "transparent" },
+        Theme = new ApexCharts.Theme { Mode = Mode.Dark },
+        Colors = CategoricalColors,
+        Legend = new Legend { Position = LegendPosition.Bottom },
+        DataLabels = new DataLabels { Enabled = true },
+    };
+
+    protected override void OnParametersSet()
+    {
+        _rows = Locations
+            .OrderByDescending(l => l.Amount)
+            .Select(l => new LocationSlice(l.Location, l.Amount))
+            .ToList();
+    }
+}

@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<GatheringSession> GatheringSessions => Set<GatheringSession>();
     public DbSet<GatheredItem> GatheredItems => Set<GatheredItem>();
     public DbSet<FameLog> FameLogs => Set<FameLog>();
+    public DbSet<SilverLog> SilverLogs => Set<SilverLog>();
     public DbSet<FlipLog> FlipLogs => Set<FlipLog>();
     public DbSet<ItemDictionary> ItemDictionaries => Set<ItemDictionary>();
     public DbSet<PriceCache> PriceCaches => Set<PriceCache>();

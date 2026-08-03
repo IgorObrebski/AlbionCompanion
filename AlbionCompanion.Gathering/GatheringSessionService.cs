@@ -15,8 +15,10 @@ public class GatheringSessionService : IGatheringSessionService
 
     public event EventHandler<GatheringSession>? OnSessionStarted;
     public event EventHandler<GatheringSession>? OnSessionEnded;
+    public event EventHandler<GatheringSession>? OnLocationChanged;
     public event EventHandler<GatheredItem>? OnItemAdded;
     public event EventHandler<FameLog>? OnFameAdded;
+    public event EventHandler<SilverLog>? OnSilverAdded;
 
     public async Task<GatheringSession?> GetActiveSessionAsync() =>
         await _dbContext.GatheringSessions.SingleOrDefaultAsync(session => session.EndTime == null);
@@ -35,7 +37,25 @@ public class GatheringSessionService : IGatheringSessionService
             .Select(g => new ItemLocationTotal(g.Key.ItemId, g.Key.Location, g.Sum(item => item.Amount)))
             .ToListAsync();
 
-        return new ActiveSessionSnapshot(session.CurrentLocation, session.TotalFameEarned, itemTotals);
+        var fameByLocation = await _dbContext.FameLogs
+            .Where(fame => fame.SessionId == session.Id)
+            .GroupBy(fame => fame.Location)
+            .Select(g => new LocationTotal(g.Key, g.Sum(fame => fame.Amount)))
+            .ToListAsync();
+
+        var silverByLocation = await _dbContext.SilverLogs
+            .Where(silver => silver.SessionId == session.Id)
+            .GroupBy(silver => silver.Location)
+            .Select(g => new LocationTotal(g.Key, g.Sum(silver => silver.Amount)))
+            .ToListAsync();
+
+        return new ActiveSessionSnapshot(
+            session.CurrentLocation,
+            session.TotalFameEarned,
+            session.TotalSilverEarned,
+            itemTotals,
+            fameByLocation,
+            silverByLocation);
     }
 
     public async Task StartSessionAsync(string location)
@@ -54,6 +74,7 @@ public class GatheringSessionService : IGatheringSessionService
             {
                 activeSession.CurrentLocation = location;
                 await _dbContext.SaveChangesAsync();
+                OnLocationChanged?.Invoke(this, activeSession);
             }
 
             return;
@@ -84,7 +105,8 @@ public class GatheringSessionService : IGatheringSessionService
         // which GetActiveSessionAsync doesn't Include and so would always read as empty.
         var hasAnyActivity =
             await _dbContext.GatheredItems.AnyAsync(item => item.SessionId == session.Id) ||
-            await _dbContext.FameLogs.AnyAsync(fame => fame.SessionId == session.Id);
+            await _dbContext.FameLogs.AnyAsync(fame => fame.SessionId == session.Id) ||
+            await _dbContext.SilverLogs.AnyAsync(silver => silver.SessionId == session.Id);
 
         if (!hasAnyActivity)
         {
@@ -134,6 +156,7 @@ public class GatheringSessionService : IGatheringSessionService
             SessionId = session.Id,
             FameType = fameType,
             Amount = amount,
+            Location = session.CurrentLocation,
             Timestamp = DateTime.UtcNow,
         };
         _dbContext.FameLogs.Add(fameLog);
@@ -141,5 +164,27 @@ public class GatheringSessionService : IGatheringSessionService
 
         await _dbContext.SaveChangesAsync();
         OnFameAdded?.Invoke(this, fameLog);
+    }
+
+    public async Task AddSilverAsync(int amount)
+    {
+        var session = await GetActiveSessionAsync();
+        if (session is null)
+        {
+            return;
+        }
+
+        var silverLog = new SilverLog
+        {
+            SessionId = session.Id,
+            Amount = amount,
+            Location = session.CurrentLocation,
+            Timestamp = DateTime.UtcNow,
+        };
+        _dbContext.SilverLogs.Add(silverLog);
+        session.TotalSilverEarned += amount;
+
+        await _dbContext.SaveChangesAsync();
+        OnSilverAdded?.Invoke(this, silverLog);
     }
 }

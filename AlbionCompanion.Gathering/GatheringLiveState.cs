@@ -9,10 +9,14 @@ public class GatheringLiveState : IGatheringLiveState
     // mutation (Dictionary<> itself does not support concurrent read/write).
     private readonly object _lock = new();
     private readonly Dictionary<(string ItemId, string Location), int> _itemTotals = new();
+    private readonly Dictionary<string, int> _fameByLocation = new();
+    private readonly Dictionary<string, int> _silverByLocation = new();
 
     private bool _isActive;
     private string? _startLocation;
+    private string? _currentLocation;
     private int _totalFame;
+    private int _totalSilver;
 
     public bool IsActive
     {
@@ -24,9 +28,19 @@ public class GatheringLiveState : IGatheringLiveState
         get { lock (_lock) { return _startLocation; } }
     }
 
+    public string? CurrentLocation
+    {
+        get { lock (_lock) { return _currentLocation; } }
+    }
+
     public int TotalFame
     {
         get { lock (_lock) { return _totalFame; } }
+    }
+
+    public int TotalSilver
+    {
+        get { lock (_lock) { return _totalSilver; } }
     }
 
     public IReadOnlyList<ItemLocationTotal> ItemTotals
@@ -36,6 +50,28 @@ public class GatheringLiveState : IGatheringLiveState
             lock (_lock)
             {
                 return _itemTotals.Select(kv => new ItemLocationTotal(kv.Key.ItemId, kv.Key.Location, kv.Value)).ToList();
+            }
+        }
+    }
+
+    public IReadOnlyList<LocationTotal> FameByLocation
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _fameByLocation.Select(kv => new LocationTotal(kv.Key, kv.Value)).ToList();
+            }
+        }
+    }
+
+    public IReadOnlyList<LocationTotal> SilverByLocation
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _silverByLocation.Select(kv => new LocationTotal(kv.Key, kv.Value)).ToList();
             }
         }
     }
@@ -59,10 +95,20 @@ public class GatheringLiveState : IGatheringLiveState
             {
                 _isActive = true;
                 _startLocation = snapshot.CurrentLocation;
+                _currentLocation = snapshot.CurrentLocation;
                 _totalFame = snapshot.TotalFameEarned;
+                _totalSilver = snapshot.TotalSilverEarned;
                 foreach (var total in snapshot.ItemTotals)
                 {
                     _itemTotals[(total.ItemId, total.Location)] = total.Amount;
+                }
+                foreach (var total in snapshot.FameByLocation)
+                {
+                    _fameByLocation[total.Location] = total.Amount;
+                }
+                foreach (var total in snapshot.SilverByLocation)
+                {
+                    _silverByLocation[total.Location] = total.Amount;
                 }
             }
 
@@ -74,8 +120,12 @@ public class GatheringLiveState : IGatheringLiveState
             lock (_lock)
             {
                 _itemTotals.Clear();
+                _fameByLocation.Clear();
+                _silverByLocation.Clear();
                 _totalFame = 0;
+                _totalSilver = 0;
                 _startLocation = session.StartLocation;
+                _currentLocation = session.StartLocation;
                 _isActive = true;
             }
         });
@@ -85,6 +135,14 @@ public class GatheringLiveState : IGatheringLiveState
             lock (_lock)
             {
                 _isActive = false;
+            }
+        });
+
+        sessionService.OnLocationChanged += (_, session) => Safely(() =>
+        {
+            lock (_lock)
+            {
+                _currentLocation = session.CurrentLocation;
             }
         });
 
@@ -103,6 +161,16 @@ public class GatheringLiveState : IGatheringLiveState
             lock (_lock)
             {
                 _totalFame += fameLog.Amount;
+                _fameByLocation[fameLog.Location] = _fameByLocation.GetValueOrDefault(fameLog.Location) + fameLog.Amount;
+            }
+        });
+
+        sessionService.OnSilverAdded += (_, silverLog) => Safely(() =>
+        {
+            lock (_lock)
+            {
+                _totalSilver += silverLog.Amount;
+                _silverByLocation[silverLog.Location] = _silverByLocation.GetValueOrDefault(silverLog.Location) + silverLog.Amount;
             }
         });
     }

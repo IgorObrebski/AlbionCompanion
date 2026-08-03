@@ -8,8 +8,10 @@ public class GatheringLiveStateTests
     {
         public event EventHandler<GatheringSession>? OnSessionStarted;
         public event EventHandler<GatheringSession>? OnSessionEnded;
+        public event EventHandler<GatheringSession>? OnLocationChanged;
         public event EventHandler<GatheredItem>? OnItemAdded;
         public event EventHandler<FameLog>? OnFameAdded;
+        public event EventHandler<SilverLog>? OnSilverAdded;
 
         public ActiveSessionSnapshot? SnapshotToReturn { get; set; }
 
@@ -17,13 +19,16 @@ public class GatheringLiveStateTests
         public Task EndSessionAsync() => Task.CompletedTask;
         public Task AddItemAsync(string itemId, int amount) => Task.CompletedTask;
         public Task AddFameAsync(string fameType, int amount) => Task.CompletedTask;
+        public Task AddSilverAsync(int amount) => Task.CompletedTask;
         public Task<GatheringSession?> GetActiveSessionAsync() => Task.FromResult<GatheringSession?>(null);
         public Task<ActiveSessionSnapshot?> GetActiveSessionSnapshotAsync() => Task.FromResult(SnapshotToReturn);
 
         public void RaiseSessionStarted(GatheringSession session) => OnSessionStarted?.Invoke(this, session);
         public void RaiseSessionEnded(GatheringSession session) => OnSessionEnded?.Invoke(this, session);
+        public void RaiseLocationChanged(GatheringSession session) => OnLocationChanged?.Invoke(this, session);
         public void RaiseItemAdded(GatheredItem item) => OnItemAdded?.Invoke(this, item);
         public void RaiseFameAdded(FameLog fameLog) => OnFameAdded?.Invoke(this, fameLog);
+        public void RaiseSilverAdded(SilverLog silverLog) => OnSilverAdded?.Invoke(this, silverLog);
     }
 
     private static int AmountFor(IGatheringLiveState liveState, string itemId, string location = "") =>
@@ -84,6 +89,20 @@ public class GatheringLiveStateTests
     }
 
     [Fact]
+    public async Task OnSilverAdded_Twice_TotalSilverAccumulatesByLocation()
+    {
+        var liveState = new GatheringLiveState();
+        var service = new FakeGatheringSessionService();
+        await liveState.Attach(service);
+
+        service.RaiseSilverAdded(new SilverLog { Amount = 92, Location = "Cairn Camain" });
+        service.RaiseSilverAdded(new SilverLog { Amount = 40, Location = "Cairn Camain" });
+
+        Assert.Equal(132, liveState.TotalSilver);
+        Assert.Equal(132, liveState.SilverByLocation.Single(l => l.Location == "Cairn Camain").Amount);
+    }
+
+    [Fact]
     public async Task OnSessionStarted_AfterPriorActivity_ResetsState()
     {
         var liveState = new GatheringLiveState();
@@ -98,6 +117,22 @@ public class GatheringLiveStateTests
         Assert.Equal(0, liveState.TotalFame);
         Assert.True(liveState.IsActive);
         Assert.Equal("Martlock", liveState.StartLocation);
+    }
+
+    [Fact]
+    public async Task OnLocationChanged_UpdatesCurrentLocationButNotStartLocation()
+    {
+        // A roaming session's StartSessionAsync updates CurrentLocation without ending the
+        // session - the header must track that, not stay frozen on where the session began.
+        var liveState = new GatheringLiveState();
+        var service = new FakeGatheringSessionService();
+        await liveState.Attach(service);
+        service.RaiseSessionStarted(new GatheringSession { StartLocation = "Cairn Camain" });
+
+        service.RaiseLocationChanged(new GatheringSession { StartLocation = "Cairn Camain", CurrentLocation = "Martlock" });
+
+        Assert.Equal("Cairn Camain", liveState.StartLocation);
+        Assert.Equal("Martlock", liveState.CurrentLocation);
     }
 
     [Fact]
@@ -150,7 +185,10 @@ public class GatheringLiveStateTests
             SnapshotToReturn = new ActiveSessionSnapshot(
                 CurrentLocation: "Cairn Camain",
                 TotalFameEarned: 150,
-                ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) }),
+                TotalSilverEarned: 500,
+                ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) },
+                FameByLocation: new[] { new LocationTotal("Cairn Camain", 150) },
+                SilverByLocation: new[] { new LocationTotal("Cairn Camain", 500) }),
         };
 
         await liveState.Attach(service);
@@ -184,7 +222,10 @@ public class GatheringLiveStateTests
             SnapshotToReturn = new ActiveSessionSnapshot(
                 CurrentLocation: "Cairn Camain",
                 TotalFameEarned: 150,
-                ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) }),
+                TotalSilverEarned: 500,
+                ItemTotals: new[] { new ItemLocationTotal("T4_ORE", "Cairn Camain", 12) },
+                FameByLocation: new[] { new LocationTotal("Cairn Camain", 150) },
+                SilverByLocation: new[] { new LocationTotal("Cairn Camain", 500) }),
         };
 
         await liveState.Attach(service);

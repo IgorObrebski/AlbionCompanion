@@ -20,9 +20,49 @@ else
     <h1 style="font-size: 24px; margin-bottom: 4px;">@_detail.StartLocation</h1>
     <p class="ac-subtitle">@_detail.StartTime.ToLocalTime().ToString("g") — @_detail.EndTime.ToLocalTime().ToString("g")</p>
 
-    <div class="ac-card">
-        <div class="ac-card-kicker">Total fame</div>
-        <div class="ac-card-value">@_detail.TotalFameEarned.ToString("N0")</div>
+    <div class="ac-card-row">
+        <div class="ac-card">
+            <div class="ac-card-head">
+                <div class="ac-card-kicker">Total</div>
+            </div>
+            <div class="ac-card-stats">
+                <div class="ac-card-stat">
+                    <div class="ac-card-stat-label">Fame</div>
+                    <div class="ac-card-value">@_detail.TotalFameEarned.ToString("N0")</div>
+                </div>
+                <div class="ac-card-stat">
+                    <div class="ac-card-stat-label">Items</div>
+                    <div class="ac-card-value">@TotalItems.ToString("N0")</div>
+                </div>
+                <div class="ac-card-stat">
+                    <div class="ac-card-stat-label">Silver</div>
+                    <div class="ac-card-value">@_detail.TotalSilverEarned.ToString("N0")</div>
+                </div>
+            </div>
+        </div>
+
+        @foreach (var location in LocationBreakdown)
+        {
+            <div class="ac-card">
+                <div class="ac-card-head">
+                    <div class="ac-card-kicker">@location.Location</div>
+                </div>
+                <div class="ac-card-stats">
+                    <div class="ac-card-stat">
+                        <div class="ac-card-stat-label">Fame</div>
+                        <div class="ac-card-value">@location.Fame.ToString("N0")</div>
+                    </div>
+                    <div class="ac-card-stat">
+                        <div class="ac-card-stat-label">Items</div>
+                        <div class="ac-card-value">@location.Items.ToString("N0")</div>
+                    </div>
+                    <div class="ac-card-stat">
+                        <div class="ac-card-stat-label">Silver</div>
+                        <div class="ac-card-value">@location.Silver.ToString("N0")</div>
+                    </div>
+                </div>
+            </div>
+        }
     </div>
 
     @if (_detail.ItemTotals.Count == 0)
@@ -33,6 +73,23 @@ else
     {
         <ItemTable Items="_detail.ItemTotals" Title="Items gathered" />
     }
+
+    <ItemsBarChart Items="_detail.ItemTotals" Title="Items gathered — by resource" />
+
+    @if (LocationBreakdown.Count > 0)
+    {
+        <div class="ac-chart-row">
+            <LocationPieChart Locations="_detail.FameByLocation" Title="Fame by location" ValueLabel="Fame" />
+            <LocationPieChart Locations="ItemsByLocation" Title="Items by location" ValueLabel="Items" />
+            <LocationPieChart Locations="_detail.SilverByLocation" Title="Silver by location" ValueLabel="Silver" />
+        </div>
+    }
+
+    <div class="ac-chart-row">
+        <CumulativeChart Events="_detail.FameTimeline" SessionStart="_detail.StartTime" SessionEnd="_detail.EndTime" Title="Fame over time" ValueLabel="Fame" />
+        <CumulativeChart Events="_detail.ItemTimeline" SessionStart="_detail.StartTime" SessionEnd="_detail.EndTime" Title="Items over time" ValueLabel="Items" />
+        <CumulativeChart Events="_detail.SilverTimeline" SessionStart="_detail.StartTime" SessionEnd="_detail.EndTime" Title="Silver over time" ValueLabel="Silver" />
+    </div>
 }
 
 @code {
@@ -41,6 +98,55 @@ else
 
     private AlbionCompanion.Gathering.SessionDetail? _detail;
     private bool _loadFailed;
+
+    private int TotalItems => _detail?.ItemTotals.Sum(t => t.Amount) ?? 0;
+
+    private List<LocationTotal> ItemsByLocation =>
+        _detail?.ItemTotals
+            .GroupBy(t => t.Location)
+            .Select(g => new LocationTotal(g.Key, g.Sum(t => t.Amount)))
+            .ToList() ?? new List<LocationTotal>();
+
+    private List<(string Location, int Fame, int Items, int Silver)> LocationBreakdown
+    {
+        get
+        {
+            if (_detail is null)
+            {
+                return new List<(string, int, int, int)>();
+            }
+
+            var locations = _detail.ItemTotals.Select(t => t.Location)
+                .Concat(_detail.FameByLocation.Select(f => f.Location))
+                .Concat(_detail.SilverByLocation.Select(s => s.Location))
+                .Distinct()
+                .ToList();
+
+            // Only worth showing once a session actually roamed through more than one zone - a
+            // single-location session would just duplicate the aggregate card above.
+            if (locations.Count <= 1)
+            {
+                return new List<(string, int, int, int)>();
+            }
+
+            var itemsByLocation = _detail.ItemTotals
+                .GroupBy(t => t.Location)
+                .ToDictionary(g => g.Key, g => g.Sum(t => t.Amount));
+            var fameByLocation = _detail.FameByLocation
+                .ToDictionary(f => f.Location, f => f.Amount);
+            var silverByLocation = _detail.SilverByLocation
+                .ToDictionary(s => s.Location, s => s.Amount);
+
+            return locations
+                .Select(location => (
+                    Location: location,
+                    Fame: fameByLocation.GetValueOrDefault(location),
+                    Items: itemsByLocation.GetValueOrDefault(location),
+                    Silver: silverByLocation.GetValueOrDefault(location)))
+                .OrderByDescending(l => l.Fame + l.Items + l.Silver)
+                .ToList();
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {

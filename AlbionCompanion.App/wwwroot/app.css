@@ -46,6 +46,20 @@
     --ac-enchant-4-bg: color-mix(in srgb, #eab308 22%, transparent);
     --ac-enchant-4-fg: #fef08a;
 
+    /* Chart palette - validated with the dataviz skill's validate_palette.js against this
+       surface (#1c1e2c): lightness band, chroma floor, CVD separation and normal-vision floor
+       all PASS. Categorical hues are assigned in this fixed order, never cycled/reused for rank. */
+    --ac-chart-magnitude: #3987e5;
+    --ac-chart-cat-1: #3987e5;
+    --ac-chart-cat-2: #d95926;
+    --ac-chart-cat-3: #199e70;
+    --ac-chart-cat-4: #c98500;
+    --ac-chart-cat-5: #d55181;
+    --ac-chart-cat-6: #008300;
+    --ac-chart-cat-7: #9085e9;
+    --ac-chart-cat-8: #e66767;
+    --ac-chart-grid: color-mix(in srgb, var(--ac-text) 10%, transparent);
+
     --ac-space-1: 4px;
     --ac-space-2: 8px;
     --ac-space-3: 12px;
@@ -208,6 +222,115 @@ html, body {
     font-variant-numeric: tabular-nums;
 }
 
+.ac-card-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ac-space-4);
+    margin-bottom: var(--ac-space-8);
+}
+
+.ac-card-row .ac-card {
+    margin-bottom: 0;
+}
+
+.ac-card-stats {
+    display: flex;
+    gap: var(--ac-space-6);
+}
+
+.ac-card-stat-label {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ac-text-muted);
+    margin-bottom: 2px;
+}
+
+.ac-card-stats .ac-card-value {
+    font-size: 28px;
+}
+
+/* ---- charts ---- */
+.ac-chart-card {
+    padding: var(--ac-space-4);
+    border-radius: var(--ac-radius-md);
+    background: var(--ac-surface-raised);
+    box-shadow: var(--ac-shadow-sm);
+    margin-bottom: var(--ac-space-6);
+}
+
+.ac-chart-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ac-space-4);
+}
+
+.ac-chart-row .ac-chart-card {
+    flex: 1 1 320px;
+}
+
+.ac-chart-title {
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ac-text-muted);
+    margin-bottom: var(--ac-space-3);
+}
+
+.ac-chart-svg text {
+    fill: var(--ac-text-muted);
+    font-size: 10px;
+}
+
+.ac-chart-svg .ac-chart-axis {
+    stroke: var(--ac-chart-grid);
+    stroke-width: 1;
+}
+
+.ac-chart-svg .ac-chart-bar {
+    fill: var(--ac-chart-magnitude);
+    transition: opacity 0.1s ease;
+}
+
+.ac-chart-svg .ac-chart-bar:hover,
+.ac-chart-svg .ac-chart-hit:hover + .ac-chart-bar,
+.ac-chart-svg .ac-chart-line-hit:hover {
+    opacity: 0.8;
+}
+
+.ac-chart-svg .ac-chart-value-label {
+    fill: var(--ac-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.ac-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ac-space-3);
+    margin-top: var(--ac-space-2);
+    font-size: 12px;
+    color: var(--ac-text-muted);
+}
+
+.ac-chart-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ac-chart-legend-swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.ac-chart-empty {
+    color: var(--ac-text-muted);
+    font-size: 13px;
+    padding: var(--ac-space-4) 0;
+}
+
 /* ---- section heading ---- */
 .ac-section-label {
     font-size: 13px;
@@ -253,6 +376,10 @@ html, body {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+.ac-cell-muted {
+    color: var(--ac-text-muted);
 }
 
 .ac-row-clickable {

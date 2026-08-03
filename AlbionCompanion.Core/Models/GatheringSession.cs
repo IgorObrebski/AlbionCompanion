@@ -15,6 +15,8 @@ public class GatheringSession
     // "where is the player right now."
     public string CurrentLocation { get; set; } = string.Empty;
     public int TotalFameEarned { get; set; }
+    public int TotalSilverEarned { get; set; }
     public ICollection<GatheredItem> GatheredItems { get; set; } = new List<GatheredItem>();
     public ICollection<FameLog> FameLogs { get; set; } = new List<FameLog>();
+    public ICollection<SilverLog> SilverLogs { get; set; } = new List<SilverLog>();
 }

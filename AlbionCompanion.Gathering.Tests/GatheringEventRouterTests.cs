@@ -73,6 +73,9 @@ public class GatheringEventRouterTests
     private static PhotonEvent UpdateFame(int actorEntityId, int fameDelta) =>
         new(1, new Dictionary<byte, object?> { [0] = actorEntityId, [2] = fameDelta, [252] = (byte)82 });
 
+    private static PhotonEvent UpdateMoney(int actorEntityId, long rawTotal) =>
+        new(1, new Dictionary<byte, object?> { [0] = actorEntityId, [1] = rawTotal, [252] = (byte)81 });
+
     [Fact]
     public async Task HarvestFinishedEvent_WithKnownItemIndex_AddsResolvedItemIdWithRealAmount()
     {
@@ -300,5 +303,65 @@ public class GatheringEventRouterTests
         await router.HandleEventAsync(UpdateFame(actorEntityId: 448437, fameDelta: 600000));
 
         Assert.Empty(context.FameLogs);
+    }
+
+    [Fact]
+    public async Task UpdateMoneyEvent_FirstSighting_OnlySeedsBaselineWithoutRecordingAGain()
+    {
+        // Confirmed via live capture on 2026-08-03: unlike UpdateFame, UpdateMoney carries no
+        // delta parameter, only a running total - the very first sighting can't have a delta
+        // against nothing without wrongly recording the player's entire prior wealth as a gain.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateServiceWithOpenSession(connection);
+        await service.StartSessionAsync("4213");
+        var parser = new FakePhotonParser();
+        var localPlayer = new FakeLocalPlayerTracker { CurrentEntityId = LocalPlayerEntityId };
+        var router = new GatheringEventRouter(parser, service, localPlayer, new FakeItemDictionaryService());
+
+        await router.HandleEventAsync(UpdateMoney(actorEntityId: LocalPlayerEntityId, rawTotal: 2504384241));
+
+        Assert.Empty(context.SilverLogs);
+    }
+
+    [Fact]
+    public async Task UpdateMoneyEvent_SecondSighting_RecordsScaledDeltaFromBaseline()
+    {
+        // Wire-value scale confirmed via live capture on 2026-08-03: two running-total samples
+        // (2504384241 -> displayed 250438, then 2505306831 -> displayed 250530) matched the
+        // player's own reported in-game silver gain of +92 once divided by the same 10000x scale
+        // UpdateFame uses.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateServiceWithOpenSession(connection);
+        await service.StartSessionAsync("4213");
+        var parser = new FakePhotonParser();
+        var localPlayer = new FakeLocalPlayerTracker { CurrentEntityId = LocalPlayerEntityId };
+        var router = new GatheringEventRouter(parser, service, localPlayer, new FakeItemDictionaryService());
+
+        await router.HandleEventAsync(UpdateMoney(actorEntityId: LocalPlayerEntityId, rawTotal: 2504384241));
+        await router.HandleEventAsync(UpdateMoney(actorEntityId: LocalPlayerEntityId, rawTotal: 2505306831));
+
+        var silverLog = Assert.Single(context.SilverLogs);
+        Assert.Equal(92, silverLog.Amount);
+    }
+
+    [Fact]
+    public async Task UpdateMoneyEvent_ByAnotherNearbyPlayer_IsIgnoredWithoutMovingBaseline()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateServiceWithOpenSession(connection);
+        await service.StartSessionAsync("4213");
+        var parser = new FakePhotonParser();
+        var localPlayer = new FakeLocalPlayerTracker { CurrentEntityId = LocalPlayerEntityId };
+        var router = new GatheringEventRouter(parser, service, localPlayer, new FakeItemDictionaryService());
+
+        await router.HandleEventAsync(UpdateMoney(actorEntityId: LocalPlayerEntityId, rawTotal: 2504384241));
+        await router.HandleEventAsync(UpdateMoney(actorEntityId: 448437, rawTotal: 9999999999));
+        await router.HandleEventAsync(UpdateMoney(actorEntityId: LocalPlayerEntityId, rawTotal: 2505306831));
+
+        var silverLog = Assert.Single(context.SilverLogs);
+        Assert.Equal(92, silverLog.Amount);
     }
 }

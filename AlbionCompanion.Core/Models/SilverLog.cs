@@ -2,16 +2,15 @@ using System.ComponentModel.DataAnnotations;
 
 namespace AlbionCompanion.Core.Models;
 
-public class FameLog
+public class SilverLog
 {
     [Key]
     public int Id { get; set; }
     public Guid SessionId { get; set; }
     public GatheringSession? Session { get; set; }
-    public string FameType { get; set; } = string.Empty; // "Gathering", "MobKill"
     public int Amount { get; set; }
     // Session.CurrentLocation at the moment this was earned - same reasoning as
-    // GatheredItem.Location, so fame can be broken down "by where" alongside items.
+    // GatheredItem.Location/FameLog.Location.
     public string Location { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
 }
