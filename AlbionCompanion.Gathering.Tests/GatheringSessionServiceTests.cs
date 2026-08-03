@@ -37,6 +37,7 @@ public class GatheringSessionServiceTests
         }
 
         public Task DeleteAsync(Guid id) => throw new NotImplementedException();
+        public Task RenameAsync(Guid id, string newName) => throw new NotImplementedException();
         public Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync() => throw new NotImplementedException();
         public Task<CharacterOverview?> GetOverviewAsync(Guid characterId) => throw new NotImplementedException();
     }

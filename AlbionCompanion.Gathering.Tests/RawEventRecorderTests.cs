@@ -30,6 +30,7 @@ public class RawEventRecorderTests
         public Task<IReadOnlyList<Character>> GetAllAsync() => Task.FromResult<IReadOnlyList<Character>>(Array.Empty<Character>());
         public Task<Character> AddAsync(string name) => throw new NotImplementedException();
         public Task DeleteAsync(Guid id) => throw new NotImplementedException();
+        public Task RenameAsync(Guid id, string newName) => throw new NotImplementedException();
         public Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync() => throw new NotImplementedException();
         public Task<CharacterOverview?> GetOverviewAsync(Guid characterId) => throw new NotImplementedException();
     }

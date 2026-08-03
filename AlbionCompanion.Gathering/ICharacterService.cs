@@ -7,6 +7,7 @@ public interface ICharacterService
     Task<IReadOnlyList<Character>> GetAllAsync();
     Task<Character> AddAsync(string name);
     Task DeleteAsync(Guid id);
+    Task RenameAsync(Guid id, string newName);
     Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync();
     Task<CharacterOverview?> GetOverviewAsync(Guid characterId);
 }

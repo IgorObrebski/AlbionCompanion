@@ -273,6 +273,13 @@ html, body {
     color: var(--ac-active);
 }
 
+.ac-character-card-actions {
+    margin-top: var(--ac-space-3);
+    padding-top: var(--ac-space-3);
+    border-top: 1px solid var(--ac-divider);
+    cursor: default;
+}
+
 .ac-add-character-card {
     display: flex;
     align-items: center;

@@ -49,6 +49,36 @@ else
                         <div class="ac-card-value">@overview.TotalItemsCollected.ToString("N0")</div>
                     </div>
                 </div>
+                <div class="ac-character-card-actions" @onclick:stopPropagation="true">
+                    @if (_editingId == overview.Id)
+                    {
+                        <input class="ac-input" style="width: 100%; margin-bottom: var(--ac-space-2);" value="@_editingName"
+                               @oninput="e => _editingName = e.Value?.ToString() ?? string.Empty" />
+                        @if (_editError is not null)
+                        {
+                            <p class="ac-subtitle" style="color: var(--ac-ended);">@_editError</p>
+                        }
+                        <div style="display:flex; gap: var(--ac-space-2);">
+                            <button class="ac-pager-btn" @onclick="() => RenameCharacterAsync(overview.Id)">Save</button>
+                            <button class="ac-pager-btn" @onclick="CancelEdit">Cancel</button>
+                        </div>
+                    }
+                    else if (_deletingId == overview.Id)
+                    {
+                        <p class="ac-subtitle" style="margin: 0 0 var(--ac-space-2);">Delete @overview.Name? Its sessions stay, just unlinked.</p>
+                        <div style="display:flex; gap: var(--ac-space-2);">
+                            <button class="ac-pager-btn" @onclick="() => ConfirmDeleteAsync(overview.Id)">Confirm</button>
+                            <button class="ac-pager-btn" @onclick="CancelDelete">Cancel</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="display:flex; gap: var(--ac-space-2);">
+                            <button class="ac-pager-btn" @onclick="() => StartEdit(overview.Id, overview.Name)">Edit</button>
+                            <button class="ac-pager-btn" @onclick="() => StartDelete(overview.Id)">Delete</button>
+                        </div>
+                    }
+                </div>
             </div>
         }
 
@@ -83,6 +113,10 @@ else
     private bool _showAddForm;
     private string _newCharacterName = string.Empty;
     private string? _addError;
+    private Guid? _editingId;
+    private string _editingName = string.Empty;
+    private string? _editError;
+    private Guid? _deletingId;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -126,5 +160,56 @@ else
         {
             _addError = $"\"{name}\" is already registered.";
         }
+    }
+
+    private void StartEdit(Guid characterId, string currentName)
+    {
+        _deletingId = null;
+        _editingId = characterId;
+        _editingName = currentName;
+        _editError = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+        _editError = null;
+    }
+
+    private async Task RenameCharacterAsync(Guid characterId)
+    {
+        var name = _editingName.Trim();
+        if (name.Length == 0)
+        {
+            _editError = "Enter a name.";
+            return;
+        }
+
+        try
+        {
+            await CharacterService.RenameAsync(characterId, name);
+            _editingId = null;
+            _editError = null;
+            await LoadAsync();
+        }
+        catch (DbUpdateException)
+        {
+            _editError = $"\"{name}\" is already registered.";
+        }
+    }
+
+    private void StartDelete(Guid characterId)
+    {
+        _editingId = null;
+        _deletingId = characterId;
+    }
+
+    private void CancelDelete() => _deletingId = null;
+
+    private async Task ConfirmDeleteAsync(Guid characterId)
+    {
+        await CharacterService.DeleteAsync(characterId);
+        _deletingId = null;
+        await LoadAsync();
     }
 }

@@ -47,6 +47,20 @@ public class CharacterService : ICharacterService
         await dbContext.SaveChangesAsync();
     }
 
+    public async Task RenameAsync(Guid id, string newName)
+    {
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+
+        var character = await dbContext.Characters.FindAsync(id);
+        if (character is null)
+        {
+            return;
+        }
+
+        character.Name = newName;
+        await dbContext.SaveChangesAsync();
+    }
+
     public async Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync()
     {
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync();

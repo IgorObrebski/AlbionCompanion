@@ -79,6 +79,44 @@ public class CharacterServiceTests
     }
 
     [Fact]
+    public async Task RenameAsync_UpdatesName()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, context) = CreateService(connection);
+        var character = await service.AddAsync("Ejnsztain");
+
+        await service.RenameAsync(character.Id, "Ejnsztainn");
+
+        var all = await service.GetAllAsync();
+        Assert.Equal("Ejnsztainn", Assert.Single(all).Name);
+    }
+
+    [Fact]
+    public async Task RenameAsync_DuplicateName_ThrowsDbUpdateException()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, _) = CreateService(connection);
+        await service.AddAsync("Ejnsztain");
+        var second = await service.AddAsync("Valdekir");
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => service.RenameAsync(second.Id, "Ejnsztain"));
+    }
+
+    [Fact]
+    public async Task RenameAsync_UnknownId_IsNoOp()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, _) = CreateService(connection);
+
+        await service.RenameAsync(Guid.NewGuid(), "SomeName");
+
+        Assert.Empty(await service.GetAllAsync());
+    }
+
+    [Fact]
     public async Task DeleteAsync_UnknownId_IsNoOp()
     {
         using var connection = new SqliteConnection("DataSource=:memory:");
