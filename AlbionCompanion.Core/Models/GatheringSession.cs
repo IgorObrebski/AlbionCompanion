@@ -16,6 +16,11 @@ public class GatheringSession
     public string CurrentLocation { get; set; } = string.Empty;
     public int TotalFameEarned { get; set; }
     public int TotalSilverEarned { get; set; }
+    // Which character earned this session's activity - null for sessions recorded before
+    // multi-character support existed, or for an unregistered character (see LocalPlayerTracker).
+    // Never reassigned mid-session; a session belongs to at most one character for its whole life.
+    public Guid? CharacterId { get; set; }
+    public Character? Character { get; set; }
     public ICollection<GatheredItem> GatheredItems { get; set; } = new List<GatheredItem>();
     public ICollection<FameLog> FameLogs { get; set; } = new List<FameLog>();
     public ICollection<SilverLog> SilverLogs { get; set; } = new List<SilverLog>();

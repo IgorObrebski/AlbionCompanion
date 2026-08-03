@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<GatheredItem> GatheredItems => Set<GatheredItem>();
     public DbSet<FameLog> FameLogs => Set<FameLog>();
     public DbSet<SilverLog> SilverLogs => Set<SilverLog>();
+    public DbSet<Character> Characters => Set<Character>();
     public DbSet<FlipLog> FlipLogs => Set<FlipLog>();
     public DbSet<ItemDictionary> ItemDictionaries => Set<ItemDictionary>();
     public DbSet<PriceCache> PriceCaches => Set<PriceCache>();
@@ -39,5 +40,14 @@ public class AppDbContext : DbContext
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.SetNull);
         });
+
+        modelBuilder.Entity<Character>().HasIndex(c => c.Name).IsUnique();
+
+        modelBuilder.Entity<GatheringSession>()
+            .HasOne(s => s.Character)
+            .WithMany()
+            .HasForeignKey(s => s.CharacterId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

@@ -121,4 +121,46 @@ public class AppDbContextTests
         Assert.Equal(session.Id, stored.SessionId);
         Assert.Null(stored.SemanticEventCode);
     }
+
+    [Fact]
+    public void Character_EnforcesNameUniqueness()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+
+        using (var firstContext = CreateInMemoryContext(connection))
+        {
+            firstContext.Characters.Add(new Character { Name = "Ejnsztain", CreatedAt = DateTime.UtcNow });
+            firstContext.SaveChanges();
+        }
+
+        using var secondContext = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);
+        secondContext.Characters.Add(new Character { Name = "Ejnsztain", CreatedAt = DateTime.UtcNow });
+
+        Assert.Throws<DbUpdateException>(() => secondContext.SaveChanges());
+    }
+
+    [Fact]
+    public void GatheringSession_CharacterDeleted_SetsCharacterIdNullInsteadOfDeletingSession()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+
+        var character = new Character { Name = "Ejnsztain", CreatedAt = DateTime.UtcNow };
+        context.Characters.Add(character);
+        context.GatheringSessions.Add(new GatheringSession
+        {
+            StartTime = DateTime.UtcNow,
+            StartLocation = "Martlock",
+            CharacterId = character.Id,
+        });
+        context.SaveChanges();
+
+        context.Characters.Remove(character);
+        context.SaveChanges();
+
+        var session = Assert.Single(context.GatheringSessions);
+        Assert.Null(session.CharacterId);
+    }
 }
