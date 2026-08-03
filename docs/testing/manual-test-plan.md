@@ -222,13 +222,13 @@ For each of the following, confirm both the visible in-game transition AND the D
 ## G. Live session view (UI)
 
 ### G1. Live updates while playing
-1. Launch `AlbionCompanion.App`, leave the Home page open, go gather in open world.
+1. Launch `AlbionCompanion.App`, leave the character's Broadcast page (`/characters/{id}/broadcast`) open, go gather in open world.
 2. **Verify (while still playing, don't just check after):** the page updates in real time —
    status flips to "Active — {location}", the item table gains rows and sums as you gather, fame
    stays 0 (see D1) — without you needing to restart the app or manually refresh anything.
 
 ### G2. UI matches DB exactly
-1. After a gathering session, compare what the Home page shows against:
+1. After a gathering session, compare what the Broadcast page shows against:
    ```sql
    SELECT ItemId, SUM(Amount) FROM GatheredItems
    WHERE SessionId = (SELECT Id FROM GatheringSessions ORDER BY StartTime DESC LIMIT 1)
@@ -237,7 +237,7 @@ For each of the following, confirm both the visible in-game transition AND the D
 2. **Verify:** the numbers match exactly, item for item.
 
 ### G3. Session-end tally persists until next session
-1. Return to a city (session ends). Without starting a new session, check the Home page.
+1. Return to a city (session ends). Without starting a new session, check the Broadcast page.
 2. **Verify:** it still shows the just-ended session's final tally (not blank), with status now
    "Ended" instead of "Active" — per the deliberate design decision to keep last results visible.
 3. Start a new gathering session.

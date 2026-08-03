@@ -5,7 +5,7 @@ namespace AlbionCompanion.Gathering;
 public class GatheringLiveState : IGatheringLiveState
 {
     // Mutated on the packet-capture/parse thread (via GatheringEventRouter's fire-and-forget event
-    // dispatch), read and enumerated on the Blazor UI thread (Home.razor's render). _lock protects
+    // dispatch), read and enumerated on the Blazor UI thread (Broadcast.razor's render). _lock protects
     // every access to the mutable fields below; ItemTotals hands out an immutable snapshot copy
     // rather than the live dictionary, so a UI-thread enumeration can never race a capture-thread
     // mutation (Dictionary<> itself does not support concurrent read/write).
