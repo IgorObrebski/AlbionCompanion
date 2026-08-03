@@ -72,6 +72,7 @@ public class CharacterServiceTests
 
         await service.DeleteAsync(character.Id);
 
+        context.ChangeTracker.Clear();
         Assert.Empty(await service.GetAllAsync());
         var session = Assert.Single(context.GatheringSessions);
         Assert.Null(session.CharacterId);
