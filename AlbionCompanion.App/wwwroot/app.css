@@ -250,6 +250,72 @@ html, body {
     font-size: 28px;
 }
 
+.ac-character-card {
+    cursor: pointer;
+    transition: box-shadow 0.15s ease;
+}
+
+.ac-character-card:hover {
+    box-shadow: 0 0 0 1px var(--ac-accent);
+}
+
+.ac-character-card-active {
+    box-shadow: 0 0 0 1px var(--ac-active);
+}
+
+.ac-tag-active {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ac-active);
+}
+
+.ac-add-character-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed var(--ac-divider);
+    background: transparent;
+    box-shadow: none;
+    min-height: 140px;
+}
+
+/* ---- toast ---- */
+.ac-toast {
+    position: fixed;
+    bottom: var(--ac-space-6);
+    right: var(--ac-space-6);
+    display: flex;
+    align-items: center;
+    gap: var(--ac-space-3);
+    background: var(--ac-surface-raised);
+    border: 1px solid var(--ac-divider);
+    border-radius: var(--ac-radius-md);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    padding: var(--ac-space-3) var(--ac-space-4);
+    color: var(--ac-text);
+    font-size: 13px;
+    z-index: 1000;
+}
+
+.ac-toast-link {
+    color: var(--ac-accent);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.ac-toast-close {
+    background: none;
+    border: none;
+    color: var(--ac-text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+}
+
 /* ---- charts ---- */
 .ac-chart-card {
     padding: var(--ac-space-4);

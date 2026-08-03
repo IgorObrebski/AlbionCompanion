@@ -1,0 +1,130 @@
+@page "/"
+@using AlbionCompanion.Gathering
+@using Microsoft.EntityFrameworkCore
+@inject ICharacterService CharacterService
+@inject NavigationManager Navigation
+
+<h1 style="font-size: 24px; margin-bottom: 4px;">Characters</h1>
+<p class="ac-subtitle">Pick a character to review its history, or wait for a session to start.</p>
+
+@if (_loadFailed)
+{
+    <p class="ac-subtitle">Could not load characters yet — the database may still be initializing. Try again shortly.</p>
+}
+else if (_overviews is null)
+{
+    <p class="ac-subtitle">Loading...</p>
+}
+else
+{
+    <div class="ac-card-row">
+        @foreach (var overview in _overviews)
+        {
+            <div class="ac-card ac-character-card @(overview.HasActiveSession ? "ac-character-card-active" : "")"
+                 @onclick="@((MouseEventArgs e) => NavigateToCharacter(overview.Id))">
+                <div class="ac-card-head">
+                    <div class="ac-card-kicker">@overview.Name</div>
+                    @if (overview.HasActiveSession)
+                    {
+                        <span class="ac-tag-active">
+                            <span class="ac-dot ac-dot-active"></span>
+                            Live
+                        </span>
+                    }
+                </div>
+                <p class="ac-subtitle" style="margin: 0 0 var(--ac-space-3);">
+                    @(overview.LastActive is { } lastActive ? $"Last active {lastActive.ToLocalTime():g}" : "Never played")
+                </p>
+                <div class="ac-card-stats">
+                    <div class="ac-card-stat">
+                        <div class="ac-card-stat-label">Fame</div>
+                        <div class="ac-card-value">@overview.TotalFameEarned.ToString("N0")</div>
+                    </div>
+                    <div class="ac-card-stat">
+                        <div class="ac-card-stat-label">Silver</div>
+                        <div class="ac-card-value">@overview.TotalSilverEarned.ToString("N0")</div>
+                    </div>
+                    <div class="ac-card-stat">
+                        <div class="ac-card-stat-label">Items</div>
+                        <div class="ac-card-value">@overview.TotalItemsCollected.ToString("N0")</div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="ac-card ac-add-character-card">
+            @if (_showAddForm)
+            {
+                <div style="width:100%;">
+                    <div class="ac-card-kicker" style="margin-bottom: var(--ac-space-3);">New character</div>
+                    <input class="ac-input" style="width: 100%; margin-bottom: var(--ac-space-3);" placeholder="Exact in-game name"
+                           value="@_newCharacterName" @oninput="e => _newCharacterName = e.Value?.ToString() ?? string.Empty" />
+                    @if (_addError is not null)
+                    {
+                        <p class="ac-subtitle" style="color: var(--ac-ended);">@_addError</p>
+                    }
+                    <div style="display:flex; gap: var(--ac-space-2);">
+                        <button class="ac-pager-btn" @onclick="AddCharacterAsync">Add</button>
+                        <button class="ac-pager-btn" @onclick="() => _showAddForm = false">Cancel</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <button class="ac-pager-btn" style="width: 100%; height: 100%;" @onclick="() => _showAddForm = true">+ Add character</button>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<CharacterOverview>? _overviews;
+    private bool _loadFailed;
+    private bool _showAddForm;
+    private string _newCharacterName = string.Empty;
+    private string? _addError;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private void NavigateToCharacter(Guid characterId) =>
+        Navigation.NavigateTo($"/characters/{characterId}");
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _overviews = await CharacterService.GetAllOverviewsAsync();
+        }
+        catch
+        {
+            // Only expected on a first-ever launch, if the user navigates here before
+            // AppHostBuilder.RunStartupSequenceAsync's migration (running concurrently on a
+            // separate DbContext) has created the schema. Degrade to a retry message instead of
+            // an unhandled Blazor error.
+            _loadFailed = true;
+        }
+    }
+
+    private async Task AddCharacterAsync()
+    {
+        var name = _newCharacterName.Trim();
+        if (name.Length == 0)
+        {
+            _addError = "Enter a name.";
+            return;
+        }
+
+        try
+        {
+            await CharacterService.AddAsync(name);
+            _newCharacterName = string.Empty;
+            _addError = null;
+            _showAddForm = false;
+            await LoadAsync();
+        }
+        catch (DbUpdateException)
+        {
+            _addError = $"\"{name}\" is already registered.";
+        }
+    }
+}
