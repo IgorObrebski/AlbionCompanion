@@ -114,6 +114,12 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        _loadFailed = false;
+        _hasLoaded = false;
+        _overview = null;
+        _page = null;
+        _currentPage = 1;
+
         try
         {
             _overview = await CharacterService.GetOverviewAsync(CharacterId);
