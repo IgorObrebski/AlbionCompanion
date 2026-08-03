@@ -9,6 +9,8 @@ public class RawGatheringEvent
     public Guid? SessionId { get; set; }
     public GatheringSession? Session { get; set; }
     public byte PhotonCode { get; set; }
+    // Widened from byte? to ushort? to accommodate AlbionEventCode.PlayerAnnounce = 279 (exceeds byte.MaxValue).
+    // SQLite's loose type affinity maps both byte? and ushort? to INTEGER column type, so no migration was needed.
     public ushort? SemanticEventCode { get; set; }
     // Human-readable name for SemanticEventCode (e.g. "HarvestFinished" for 61), resolved from
     // AlbionCompanion.Sniffer.AlbionEvents.AlbionEventCode at write time - added so anyone
