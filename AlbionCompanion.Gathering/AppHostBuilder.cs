@@ -21,6 +21,7 @@ public static class AppHostBuilder
         var rawEventRecordFailuresLogPath = Path.Combine(appDataPath, "debug_raw_event_record_failures.log");
         var zoneTrackerFailuresLogPath = Path.Combine(appDataPath, "debug_zone_tracker_failures.log");
         var gatheringRouterFailuresLogPath = Path.Combine(appDataPath, "debug_gathering_router_failures.log");
+        var localPlayerTrackerFailuresLogPath = Path.Combine(appDataPath, "debug_local_player_tracker_failures.log");
         var dbPath = Path.Combine(appDataPath, "albion.db");
 
         var services = new ServiceCollection();
@@ -36,6 +37,7 @@ public static class AppHostBuilder
         services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
         services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
         services.AddSingleton<IZoneCatalog, ZoneCatalog>();
+        services.AddSingleton<ICharacterService, CharacterService>();
         services.AddSingleton<ILocalPlayerTracker, LocalPlayerTracker>();
         services.AddScoped<IGatheringSessionService, GatheringSessionService>();
         services.AddSingleton<IItemDictionaryService, ItemDictionaryService>();
@@ -45,7 +47,7 @@ public static class AppHostBuilder
 
         // Stashed as singletons purely so RunStartupSequenceAsync can reach them without
         // recomputing from appDataPath - these are file paths, not services to inject elsewhere.
-        services.AddSingleton(new HostLogPaths(parseFailuresLogPath, rawEventRecordFailuresLogPath, zoneTrackerFailuresLogPath, gatheringRouterFailuresLogPath));
+        services.AddSingleton(new HostLogPaths(parseFailuresLogPath, rawEventRecordFailuresLogPath, zoneTrackerFailuresLogPath, gatheringRouterFailuresLogPath, localPlayerTrackerFailuresLogPath));
 
         return services.BuildServiceProvider();
     }
@@ -71,15 +73,18 @@ public static class AppHostBuilder
         // starts. ZoneTracker is scoped (it holds a scoped AppDbContext transitively via
         // GatheringSessionService), so its scope must stay alive for the process/app lifetime -
         // not disposed until the host shuts down.
+        var logPaths = provider.GetRequiredService<HostLogPaths>();
+
         _ = provider.GetRequiredService<AlbionEventLogger>();
         _ = provider.GetRequiredService<AlbionEventNameLogger>();
-        _ = provider.GetRequiredService<ILocalPlayerTracker>();
+        var localPlayerTracker = (LocalPlayerTracker)provider.GetRequiredService<ILocalPlayerTracker>();
+        localPlayerTracker.OnError += (_, ex) =>
+            _ = File.AppendAllTextAsync(logPaths.LocalPlayerTrackerFailuresLogPath, FormatFailureLine(ex));
 
         var sessionScope = provider.CreateScope();
         var zoneTracker = sessionScope.ServiceProvider.GetRequiredService<ZoneTracker>();
         var gatheringEventRouter = sessionScope.ServiceProvider.GetRequiredService<GatheringEventRouter>();
 
-        var logPaths = provider.GetRequiredService<HostLogPaths>();
         zoneTracker.OnError += (_, ex) =>
             _ = File.AppendAllTextAsync(logPaths.ZoneTrackerFailuresLogPath, FormatFailureLine(ex));
 
@@ -117,5 +122,5 @@ public static class AppHostBuilder
         return $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {ex.GetType().Name}: {ex.Message}{innerInfo}{suffix}{Environment.NewLine}";
     }
 
-    private sealed record HostLogPaths(string ParseFailuresLogPath, string RawEventRecordFailuresLogPath, string ZoneTrackerFailuresLogPath, string GatheringRouterFailuresLogPath);
+    private sealed record HostLogPaths(string ParseFailuresLogPath, string RawEventRecordFailuresLogPath, string ZoneTrackerFailuresLogPath, string GatheringRouterFailuresLogPath, string LocalPlayerTrackerFailuresLogPath);
 }

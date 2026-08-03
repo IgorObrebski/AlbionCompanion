@@ -30,6 +30,8 @@ public static class MauiProgram
             new SessionHistoryService(GatheringProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>()));
         builder.Services.AddSingleton<IItemDictionaryService>(_ =>
             GatheringProvider!.GetRequiredService<IItemDictionaryService>());
+        builder.Services.AddSingleton<ICharacterService>(_ =>
+            GatheringProvider!.GetRequiredService<ICharacterService>());
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();

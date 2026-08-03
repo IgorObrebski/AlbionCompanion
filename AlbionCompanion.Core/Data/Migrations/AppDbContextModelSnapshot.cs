@@ -35,7 +35,7 @@ namespace AlbionCompanion.Core.Data.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Characters");
+                    b.ToTable("Characters", (string)null);
                 });
 
             modelBuilder.Entity("AlbionCompanion.Core.Models.FameLog", b =>
@@ -65,7 +65,7 @@ namespace AlbionCompanion.Core.Data.Migrations
 
                     b.HasIndex("SessionId");
 
-                    b.ToTable("FameLogs");
+                    b.ToTable("FameLogs", (string)null);
                 });
 
             modelBuilder.Entity("AlbionCompanion.Core.Models.FlipLog", b =>
@@ -104,7 +104,7 @@ namespace AlbionCompanion.Core.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("FlipLogs");
+                    b.ToTable("FlipLogs", (string)null);
                 });
 
             modelBuilder.Entity("AlbionCompanion.Core.Models.GatheredItem", b =>
@@ -134,7 +134,7 @@ namespace AlbionCompanion.Core.Data.Migrations
 
                     b.HasIndex("SessionId");
 
-                    b.ToTable("GatheredItems");
+                    b.ToTable("GatheredItems", (string)null);
                 });
 
             modelBuilder.Entity("AlbionCompanion.Core.Models.GatheringSession", b =>
@@ -170,7 +170,7 @@ namespace AlbionCompanion.Core.Data.Migrations
 
                     b.HasIndex("CharacterId");
 
-                    b.ToTable("GatheringSessions");
+                    b.ToTable("GatheringSessions", (string)null);
                 });
 
             modelBuilder.Entity("AlbionCompanion.Core.Models.ItemDictionary", b =>
@@ -198,7 +198,7 @@ namespace AlbionCompanion.Core.Data.Migrations
 
                     b.HasKey("UniqueName");
 
-                    b.ToTable("ItemDictionaries");
+                    b.ToTable("ItemDictionaries", (string)null);
                 });
 
             modelBuilder.Entity("AlbionCompanion.Core.Models.PriceCache", b =>
@@ -220,7 +220,7 @@ namespace AlbionCompanion.Core.Data.Migrations
 
                     b.HasKey("ItemId", "Location");
 
-                    b.ToTable("PriceCaches");
+                    b.ToTable("PriceCaches", (string)null);
                 });
 
             modelBuilder.Entity("AlbionCompanion.Core.Models.RawGatheringEvent", b =>
@@ -254,7 +254,7 @@ namespace AlbionCompanion.Core.Data.Migrations
 
                     b.HasIndex("Timestamp");
 
-                    b.ToTable("RawGatheringEvents");
+                    b.ToTable("RawGatheringEvents", (string)null);
                 });
 
             modelBuilder.Entity("AlbionCompanion.Core.Models.SilverLog", b =>
@@ -280,7 +280,7 @@ namespace AlbionCompanion.Core.Data.Migrations
 
                     b.HasIndex("SessionId");
 
-                    b.ToTable("SilverLogs");
+                    b.ToTable("SilverLogs", (string)null);
                 });
 
             modelBuilder.Entity("AlbionCompanion.Core.Models.FameLog", b =>
