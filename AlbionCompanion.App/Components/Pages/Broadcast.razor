@@ -1,0 +1,137 @@
+@page "/characters/{CharacterId:guid}/broadcast"
+@using AlbionCompanion.Gathering
+@inject IGatheringLiveState LiveState
+@implements IDisposable
+
+<a class="ac-back-link" href="@($"/characters/{CharacterId}")">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg>
+    Back
+</a>
+
+<p class="ac-subtitle" style="text-transform:uppercase; letter-spacing:0.08em; font-size:11px;">Broadcast</p>
+
+@if (!LiveState.IsActive || LiveState.CharacterId != CharacterId)
+{
+    <div class="ac-empty">
+        <span class="ac-dot ac-dot-ended"></span>
+        <h1 class="ac-status-title">Not currently broadcasting</h1>
+        <p class="ac-subtitle">This character has no active session right now.</p>
+    </div>
+}
+else
+{
+    <div class="ac-status-row">
+        <span class="ac-dot @(LiveState.IsActive ? "ac-dot-active" : "ac-dot-ended")"></span>
+        <h1 class="ac-status-title">@(LiveState.IsActive ? "Active" : "Ended") — @LiveState.CurrentLocation</h1>
+    </div>
+
+    <div class="ac-card-row">
+        <div class="ac-card">
+            <div class="ac-card-head">
+                <div class="ac-card-kicker">Total — this session</div>
+            </div>
+            <div class="ac-card-stats">
+                <div class="ac-card-stat">
+                    <div class="ac-card-stat-label">Fame</div>
+                    <div class="ac-card-value">@LiveState.TotalFame.ToString("N0")</div>
+                </div>
+                <div class="ac-card-stat">
+                    <div class="ac-card-stat-label">Items</div>
+                    <div class="ac-card-value">@TotalItems.ToString("N0")</div>
+                </div>
+                <div class="ac-card-stat">
+                    <div class="ac-card-stat-label">Silver</div>
+                    <div class="ac-card-value">@LiveState.TotalSilver.ToString("N0")</div>
+                </div>
+            </div>
+        </div>
+
+        @foreach (var location in LocationBreakdown)
+        {
+            <div class="ac-card">
+                <div class="ac-card-head">
+                    <div class="ac-card-kicker">@location.Location</div>
+                </div>
+                <div class="ac-card-stats">
+                    <div class="ac-card-stat">
+                        <div class="ac-card-stat-label">Fame</div>
+                        <div class="ac-card-value">@location.Fame.ToString("N0")</div>
+                    </div>
+                    <div class="ac-card-stat">
+                        <div class="ac-card-stat-label">Items</div>
+                        <div class="ac-card-value">@location.Items.ToString("N0")</div>
+                    </div>
+                    <div class="ac-card-stat">
+                        <div class="ac-card-stat-label">Silver</div>
+                        <div class="ac-card-value">@location.Silver.ToString("N0")</div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (LiveState.ItemTotals.Count == 0)
+    {
+        <p class="ac-subtitle">No items collected yet.</p>
+    }
+    else
+    {
+        <ItemTable Items="LiveState.ItemTotals" Title="Items gathered — live" />
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid CharacterId { get; set; }
+
+    private int TotalItems => LiveState.ItemTotals.Sum(t => t.Amount);
+
+    private List<(string Location, int Fame, int Items, int Silver)> LocationBreakdown
+    {
+        get
+        {
+            var locations = LiveState.ItemTotals.Select(t => t.Location)
+                .Concat(LiveState.FameByLocation.Select(f => f.Location))
+                .Concat(LiveState.SilverByLocation.Select(s => s.Location))
+                .Distinct()
+                .ToList();
+
+            // Only worth showing once a session has actually roamed through more than one
+            // zone - a single-location session would just duplicate the aggregate card above.
+            if (locations.Count <= 1)
+            {
+                return new List<(string, int, int, int)>();
+            }
+
+            var itemsByLocation = LiveState.ItemTotals
+                .GroupBy(t => t.Location)
+                .ToDictionary(g => g.Key, g => g.Sum(t => t.Amount));
+            var fameByLocation = LiveState.FameByLocation
+                .ToDictionary(f => f.Location, f => f.Amount);
+            var silverByLocation = LiveState.SilverByLocation
+                .ToDictionary(s => s.Location, s => s.Amount);
+
+            return locations
+                .Select(location => (
+                    Location: location,
+                    Fame: fameByLocation.GetValueOrDefault(location),
+                    Items: itemsByLocation.GetValueOrDefault(location),
+                    Silver: silverByLocation.GetValueOrDefault(location)))
+                .OrderByDescending(l => l.Fame + l.Items + l.Silver)
+                .ToList();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        LiveState.OnChanged += HandleChanged;
+    }
+
+    private void HandleChanged(object? sender, EventArgs e) =>
+        InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        LiveState.OnChanged -= HandleChanged;
+    }
+}
