@@ -17,13 +17,6 @@ namespace AlbionCompanion.Core.Data.Migrations
                 type: "TEXT",
                 nullable: true);
 
-            migrationBuilder.AddColumn<int>(
-                name: "TotalSilverEarned",
-                table: "GatheringSessions",
-                type: "INTEGER",
-                nullable: false,
-                defaultValue: 0);
-
             migrationBuilder.CreateTable(
                 name: "Characters",
                 columns: table => new
@@ -73,10 +66,6 @@ namespace AlbionCompanion.Core.Data.Migrations
 
             migrationBuilder.DropColumn(
                 name: "CharacterId",
-                table: "GatheringSessions");
-
-            migrationBuilder.DropColumn(
-                name: "TotalSilverEarned",
                 table: "GatheringSessions");
         }
     }

@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AlbionCompanion.Core.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260803142033_AddCharacters")]
+    [Migration("20260803142323_AddCharacters")]
     partial class AddCharacters
     {
         /// <inheritdoc />
@@ -51,6 +51,10 @@ namespace AlbionCompanion.Core.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("FameType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Location")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
@@ -256,6 +260,32 @@ namespace AlbionCompanion.Core.Data.Migrations
                     b.ToTable("RawGatheringEvents");
                 });
 
+            modelBuilder.Entity("AlbionCompanion.Core.Models.SilverLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Amount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("SilverLogs");
+                });
+
             modelBuilder.Entity("AlbionCompanion.Core.Models.FameLog", b =>
                 {
                     b.HasOne("AlbionCompanion.Core.Models.GatheringSession", "Session")
@@ -298,11 +328,24 @@ namespace AlbionCompanion.Core.Data.Migrations
                     b.Navigation("Session");
                 });
 
+            modelBuilder.Entity("AlbionCompanion.Core.Models.SilverLog", b =>
+                {
+                    b.HasOne("AlbionCompanion.Core.Models.GatheringSession", "Session")
+                        .WithMany("SilverLogs")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("AlbionCompanion.Core.Models.GatheringSession", b =>
                 {
                     b.Navigation("FameLogs");
 
                     b.Navigation("GatheredItems");
+
+                    b.Navigation("SilverLogs");
                 });
 #pragma warning restore 612, 618
         }
