@@ -1,0 +1,158 @@
+@page "/characters/{CharacterId:guid}"
+@using AlbionCompanion.Gathering
+@inject ICharacterService CharacterService
+@inject ISessionHistoryService HistoryService
+@inject NavigationManager Navigation
+
+<a class="ac-back-link" href="/">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg>
+    Characters
+</a>
+
+@if (_loadFailed)
+{
+    <p class="ac-subtitle">Could not load this character yet — the database may still be initializing. Try again shortly.</p>
+}
+else if (!_hasLoaded)
+{
+    <p class="ac-subtitle">Loading...</p>
+}
+else if (_overview is null)
+{
+    <p class="ac-subtitle">Character not found.</p>
+}
+else
+{
+    <h1 style="font-size: 24px; margin-bottom: 4px;">@_overview.Name</h1>
+    @if (_overview.HasActiveSession)
+    {
+        <p class="ac-subtitle">
+            <span class="ac-dot ac-dot-active" style="display:inline-block; margin-right:6px;"></span>
+            Currently active — <a href="@($"/characters/{CharacterId}/broadcast")">watch the live broadcast</a>
+        </p>
+    }
+    else
+    {
+        <p class="ac-subtitle">@(_overview.LastActive is { } lastActive ? $"Last active {lastActive.ToLocalTime():g}" : "Never played")</p>
+    }
+
+    <div class="ac-card-row">
+        <div class="ac-card">
+            <div class="ac-card-head">
+                <div class="ac-card-kicker">All-time</div>
+            </div>
+            <div class="ac-card-stats">
+                <div class="ac-card-stat">
+                    <div class="ac-card-stat-label">Fame</div>
+                    <div class="ac-card-value">@_overview.TotalFameEarned.ToString("N0")</div>
+                </div>
+                <div class="ac-card-stat">
+                    <div class="ac-card-stat-label">Silver</div>
+                    <div class="ac-card-value">@_overview.TotalSilverEarned.ToString("N0")</div>
+                </div>
+                <div class="ac-card-stat">
+                    <div class="ac-card-stat-label">Items</div>
+                    <div class="ac-card-value">@_overview.TotalItemsCollected.ToString("N0")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ac-section-label">Sessions</div>
+
+    @if (_page is null)
+    {
+        <p class="ac-subtitle">Loading sessions...</p>
+    }
+    else if (_page.TotalCount == 0)
+    {
+        <p class="ac-subtitle">No completed sessions yet.</p>
+    }
+    else
+    {
+        <table class="ac-table">
+            <thead>
+                <tr>
+                    <th>Zone</th>
+                    <th>Start</th>
+                    <th>Duration</th>
+                    <th class="ac-num">Fame</th>
+                    <th class="ac-num">Items</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var session in _page.Items)
+                {
+                    <tr class="ac-row-clickable" @onclick="() => NavigateToSession(session.Id)">
+                        <td class="ac-item-cell">@string.Join(", ", session.Locations)</td>
+                        <td>@session.StartTime.ToLocalTime().ToString("g")</td>
+                        <td>@FormatDuration(session.EndTime - session.StartTime)</td>
+                        <td class="ac-num">@session.TotalFameEarned.ToString("N0")</td>
+                        <td class="ac-num">@session.TotalItemsCollected</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="ac-pager">
+            <button class="ac-pager-btn" disabled="@(_page.Page <= 1)" @onclick="() => GoToPage(_page.Page - 1)">Prev</button>
+            <span class="ac-subtitle" style="margin:0;">Page @_page.Page of @_page.TotalPages</span>
+            <button class="ac-pager-btn" disabled="@(_page.Page >= _page.TotalPages)" @onclick="() => GoToPage(_page.Page + 1)">Next</button>
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid CharacterId { get; set; }
+
+    private CharacterOverview? _overview;
+    private PagedResult<SessionSummary>? _page;
+    private bool _loadFailed;
+    private bool _hasLoaded;
+    private int _currentPage = 1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _overview = await CharacterService.GetOverviewAsync(CharacterId);
+            if (_overview is not null)
+            {
+                await LoadSessionsAsync();
+            }
+        }
+        catch
+        {
+            _loadFailed = true;
+        }
+        finally
+        {
+            _hasLoaded = true;
+        }
+    }
+
+    private async Task LoadSessionsAsync()
+    {
+        _page = await HistoryService.GetCompletedSessionsAsync(new SessionQuery(
+            Page: _currentPage,
+            PageSize: 10,
+            CharacterId: CharacterId,
+            SortBy: SessionSortColumn.StartTime,
+            SortDescending: true));
+    }
+
+    private async Task GoToPage(int page)
+    {
+        _currentPage = page;
+        await LoadSessionsAsync();
+    }
+
+    private static string FormatDuration(TimeSpan duration) =>
+        duration.Days > 0
+            ? duration.ToString(@"d\.hh\:mm\:ss")
+            : duration.ToString(@"hh\:mm\:ss");
+
+    private void NavigateToSession(Guid sessionId) =>
+        Navigation.NavigateTo($"/sessions/{sessionId}");
+}
