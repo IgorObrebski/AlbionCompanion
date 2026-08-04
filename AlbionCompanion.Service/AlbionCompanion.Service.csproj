@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-AlbionCompanion.Service-ec360263-2f2d-49f0-ad5a-46a0c0ad5d10</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AlbionCompanion.Core\AlbionCompanion.Core.csproj" />
+    <ProjectReference Include="..\AlbionCompanion.Sniffer\AlbionCompanion.Sniffer.csproj" />
+    <ProjectReference Include="..\AlbionCompanion.Gathering\AlbionCompanion.Gathering.csproj" />
+  </ItemGroup>
+</Project>
