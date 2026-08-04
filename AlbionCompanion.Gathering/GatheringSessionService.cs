@@ -24,8 +24,55 @@ public class GatheringSessionService : IGatheringSessionService
     public event EventHandler<FameLog>? OnFameAdded;
     public event EventHandler<SilverLog>? OnSilverAdded;
 
-    public async Task<GatheringSession?> GetActiveSessionAsync() =>
-        await _dbContext.GatheringSessions.SingleOrDefaultAsync(session => session.EndTime == null);
+    // A session with no gathering activity logged for this long is almost certainly orphaned -
+    // ZoneTracker only ever ends a session on a return-to-city zone transition, so closing the
+    // game/app while still in open world leaves EndTime null forever. Confirmed live 2026-08-04:
+    // a session from the previous day got silently "resumed" on the next app launch instead of a
+    // new one starting, with a permanently-null CharacterId (frozen at whatever it resolved to
+    // when the orphaned session started).
+    private static readonly TimeSpan StaleSessionThreshold = TimeSpan.FromHours(1);
+
+    public async Task<GatheringSession?> GetActiveSessionAsync()
+    {
+        var session = await _dbContext.GatheringSessions.SingleOrDefaultAsync(s => s.EndTime == null);
+        if (session is null)
+        {
+            return null;
+        }
+
+        var lastActivity = await GetLastActivityAsync(session.Id) ?? session.StartTime;
+        if (DateTime.UtcNow - lastActivity > StaleSessionThreshold)
+        {
+            await CloseSessionAsync(session);
+            return null;
+        }
+
+        return session;
+    }
+
+    private async Task<DateTime?> GetLastActivityAsync(Guid sessionId)
+    {
+        var latestItem = await _dbContext.GatheredItems
+            .Where(item => item.SessionId == sessionId)
+            .MaxAsync(item => (DateTime?)item.Timestamp);
+        var latestFame = await _dbContext.FameLogs
+            .Where(fame => fame.SessionId == sessionId)
+            .MaxAsync(fame => (DateTime?)fame.Timestamp);
+        var latestSilver = await _dbContext.SilverLogs
+            .Where(silver => silver.SessionId == sessionId)
+            .MaxAsync(silver => (DateTime?)silver.Timestamp);
+
+        DateTime? latest = null;
+        foreach (var candidate in new[] { latestItem, latestFame, latestSilver })
+        {
+            if (candidate is { } value && (latest is null || value > latest))
+            {
+                latest = value;
+            }
+        }
+
+        return latest;
+    }
 
     public async Task<ActiveSessionSnapshot?> GetActiveSessionSnapshotAsync()
     {
@@ -106,6 +153,11 @@ public class GatheringSessionService : IGatheringSessionService
             return;
         }
 
+        await CloseSessionAsync(session);
+    }
+
+    private async Task CloseSessionAsync(GatheringSession session)
+    {
         // An empty run (nothing gathered before returning to town) isn't worth keeping.
         // Queried directly by SessionId rather than via the session's navigation collections,
         // which GetActiveSessionAsync doesn't Include and so would always read as empty.

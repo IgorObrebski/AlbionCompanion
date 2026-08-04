@@ -383,4 +383,94 @@ public class GatheringSessionServiceTests
         var active = await service.GetActiveSessionAsync();
         Assert.Null(active!.CharacterId);
     }
+
+    // Regression for a real orphaned-session bug found 2026-08-04: closing the game/app while
+    // still in open world (no return-to-city zone transition) leaves EndTime null forever -
+    // ZoneTracker only ever ends a session on that specific transition. Without this check, the
+    // *next* app launch silently "resumes" that ancient session (GetActiveSessionAsync just
+    // checks EndTime == null, with no concept of staleness), which never fires OnSessionStarted
+    // (so no toast) and never re-resolves CharacterId (frozen at whatever it was, possibly null).
+
+    [Fact]
+    public async Task GetActiveSessionAsync_WithRecentActivity_StaysActive()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+        var service = CreateService(context);
+        await service.StartSessionAsync("Martlock");
+        await service.AddItemAsync("T4_ORE", 5);
+
+        var active = await service.GetActiveSessionAsync();
+
+        Assert.NotNull(active);
+        Assert.Null(active!.EndTime);
+    }
+
+    [Fact]
+    public async Task GetActiveSessionAsync_InactiveTooLongWithActivity_ClosesItAndReturnsNull()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+        var service = CreateService(context);
+        await service.StartSessionAsync("Martlock");
+        await service.AddItemAsync("T4_ORE", 5);
+
+        var staleTime = DateTime.UtcNow.AddHours(-2);
+        var session = await context.GatheringSessions.SingleAsync();
+        session.StartTime = staleTime;
+        await context.SaveChangesAsync();
+        await context.GatheredItems.Where(i => i.SessionId == session.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(i => i.Timestamp, staleTime));
+
+        var active = await service.GetActiveSessionAsync();
+
+        Assert.Null(active);
+        var persisted = Assert.Single(context.GatheringSessions);
+        Assert.NotNull(persisted.EndTime);
+    }
+
+    [Fact]
+    public async Task GetActiveSessionAsync_InactiveTooLongWithNoActivity_DeletesIt()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+        var service = CreateService(context);
+        await service.StartSessionAsync("Martlock");
+        var session = await context.GatheringSessions.SingleAsync();
+        session.StartTime = DateTime.UtcNow.AddHours(-2);
+        await context.SaveChangesAsync();
+
+        var active = await service.GetActiveSessionAsync();
+
+        Assert.Null(active);
+        Assert.Empty(context.GatheringSessions);
+    }
+
+    [Fact]
+    public async Task StartSessionAsync_WhenActiveSessionIsStale_ClosesItAndStartsANewOne()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        using var context = CreateInMemoryContext(connection);
+        var service = CreateService(context);
+        await service.StartSessionAsync("Martlock");
+        await service.AddItemAsync("T4_ORE", 5);
+        var staleTime = DateTime.UtcNow.AddHours(-2);
+        var staleSession = await context.GatheringSessions.SingleAsync();
+        staleSession.StartTime = staleTime;
+        await context.SaveChangesAsync();
+        await context.GatheredItems.Where(i => i.SessionId == staleSession.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(i => i.Timestamp, staleTime));
+
+        await service.StartSessionAsync("Bridgewatch");
+
+        Assert.Equal(2, context.GatheringSessions.Count());
+        var newSession = await service.GetActiveSessionAsync();
+        Assert.Equal("Bridgewatch", newSession!.StartLocation);
+        var oldSession = await context.GatheringSessions.SingleAsync(s => s.Id == staleSession.Id);
+        Assert.NotNull(oldSession.EndTime);
+    }
 }
