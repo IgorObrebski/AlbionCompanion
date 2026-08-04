@@ -12,16 +12,20 @@
     <p>Status: <strong>@_serviceStatus</strong></p>
     @if (_serviceStatus == ServiceStatus.Stopped)
     {
-        <button class="ac-button" @onclick="StartServiceAsync" disabled="@_starting">Uruchom serwis</button>
+        <button class="ac-button" @onclick="StartServiceAsync" disabled="@_starting">Start service</button>
+    }
+    else if (_serviceStatus == ServiceStatus.Pending)
+    {
+        <p class="ac-subtitle">Service is starting...</p>
     }
     else if (_serviceStatus == ServiceStatus.NotInstalled)
     {
-        <p class="ac-subtitle">Serwis nie jest zainstalowany - uruchom installer.exe.</p>
+        <p class="ac-subtitle">Service is not installed - run installer.exe.</p>
     }
 </div>
 
 <div class="ac-card">
-    <h2>Połączenie live</h2>
+    <h2>Live connection</h2>
     <p>Status: <strong>@PipeClient.Status</strong></p>
 </div>
 
@@ -33,8 +37,30 @@
     protected override async Task OnInitializedAsync()
     {
         await RefreshStatusAsync();
-        _pollTimer = new Timer(async _ => await RefreshStatusAsync(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        _pollTimer = new Timer(TimerCallback, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
         PipeClient.OnStatusChanged += OnPipeStatusChanged;
+    }
+
+    // Timer's callback runs on a thread-pool thread with no caller to observe a faulted Task - an
+    // async-void-shaped lambda here would turn any exception inside RefreshStatusAsync into an
+    // unhandled exception that can crash the whole process. Swallow and log-free-drop it instead;
+    // the next tick just tries again.
+    private void TimerCallback(object? state)
+    {
+        _ = RefreshStatusSafeAsync();
+    }
+
+    private async Task RefreshStatusSafeAsync()
+    {
+        try
+        {
+            await RefreshStatusAsync();
+        }
+        catch
+        {
+            // Transient failure (e.g. the component is mid-disposal) must never crash the process
+            // from a timer callback - the next tick will simply retry.
+        }
     }
 
     private async Task RefreshStatusAsync()
