@@ -39,6 +39,8 @@ public class LocalPlayerTrackerTests
             Characters.Add(newCharacter);
             CharactersChanged?.Invoke(this, EventArgs.Empty);
         }
+
+        public void NotifyCharactersChanged() => CharactersChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private static PhotonResponse ZoneJoinResponse(int ownEntityId, string nickname = "Ejnsztain") =>

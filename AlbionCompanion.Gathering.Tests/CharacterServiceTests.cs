@@ -206,4 +206,18 @@ public class CharacterServiceTests
 
         Assert.Equal(2, overviews.Count);
     }
+
+    [Fact]
+    public void NotifyCharactersChanged_RaisesCharactersChanged()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var (service, _) = CreateService(connection);
+        var raiseCount = 0;
+        service.CharactersChanged += (_, _) => raiseCount++;
+
+        service.NotifyCharactersChanged();
+
+        Assert.Equal(1, raiseCount);
+    }
 }

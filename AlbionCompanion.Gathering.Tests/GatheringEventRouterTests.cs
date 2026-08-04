@@ -34,6 +34,7 @@ public class GatheringEventRouterTests
         public Task RenameAsync(Guid id, string newName) => throw new NotImplementedException();
         public Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync() => throw new NotImplementedException();
         public Task<CharacterOverview?> GetOverviewAsync(Guid characterId) => throw new NotImplementedException();
+        public void NotifyCharactersChanged() => CharactersChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private sealed class FakeItemDictionaryService : IItemDictionaryService

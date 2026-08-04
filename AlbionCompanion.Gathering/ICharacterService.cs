@@ -14,6 +14,12 @@ public interface ICharacterService
     Task RenameAsync(Guid id, string newName);
     Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync();
     Task<CharacterOverview?> GetOverviewAsync(Guid characterId);
+
+    // Re-raises CharactersChanged locally without itself changing any character data - used by
+    // LiveEventPipeServer to propagate a change that happened in a different process (the App
+    // writes characters, but LocalPlayerTracker's cache lives in the Service process) into this
+    // process's own event, exactly as if AddAsync/DeleteAsync/RenameAsync had run here.
+    void NotifyCharactersChanged();
 }
 
 // One character's aggregate stats across every session it's attached to - the character hub
