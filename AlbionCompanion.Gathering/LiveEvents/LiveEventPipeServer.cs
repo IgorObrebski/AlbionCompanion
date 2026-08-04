@@ -1,4 +1,7 @@
 using System.IO.Pipes;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using AlbionCompanion.Core.Models;
 
 namespace AlbionCompanion.Gathering.LiveEvents;
@@ -22,7 +25,7 @@ public class LiveEventPipeServer
     }
 
     private readonly string _pipeName;
-    private readonly ICharacterService _characterService;
+    private ICharacterService _characterService;
     private readonly List<ClientWriter> _writers = new();
     private readonly object _writersLock = new();
     private IGatheringLiveEventSource? _source;
@@ -39,12 +42,23 @@ public class LiveEventPipeServer
         _characterService = characterService;
     }
 
-    public void AttachSource(IGatheringLiveEventSource source)
+    // characterService, when supplied, must be the CURRENT gathering pipeline's own ICharacterService
+    // instance - not some other long-lived instance from a separate DI container. LocalPlayerTracker
+    // (inside the pipeline) subscribes to its constructor-injected ICharacterService.CharactersChanged
+    // at construction time; NotifyCharactersChanged() below only reaches that subscription if this is
+    // the exact same instance. Passing null keeps whatever characterService is already set (used by
+    // DetachSource/no-op re-attach paths and by tests that don't care about cache invalidation).
+    public void AttachSource(IGatheringLiveEventSource source, ICharacterService? characterService = null)
     {
         // Guard against double-subscription if a source is already attached (e.g. Worker calling
         // AttachSource again without an intervening DetachSource) - unsubscribe the old handlers
         // from the old source first.
         DetachSource();
+
+        if (characterService is not null)
+        {
+            _characterService = characterService;
+        }
 
         _source = source;
         _onSessionStarted = (_, s) => Broadcast(new SessionStartedMessage(s.Id, s.StartLocation, s.CharacterId));
@@ -89,7 +103,7 @@ public class LiveEventPipeServer
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            var pipe = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            var pipe = CreatePipe();
             try
             {
                 await pipe.WaitForConnectionAsync(cancellationToken);
@@ -114,6 +128,41 @@ public class LiveEventPipeServer
 
             _ = HandleClientAsync(pipe, clientWriter, cancellationToken);
         }
+    }
+
+    // The Service runs as LocalSystem, so the plain NamedPipeServerStream constructor gets a default
+    // security descriptor scoped to LocalSystem/Administrators - full control - with only limited
+    // access granted to Everyone/interactive users. The App connects as a non-elevated interactive
+    // user requesting PipeDirection.InOut (read+write), which can throw UnauthorizedAccessException
+    // against that default descriptor - silently swallowed by LiveEventPipeClient's broad catch into
+    // an ordinary failed-attempt retry, with zero diagnostic signal pointing at the real cause.
+    // Grant BUILTIN\Users explicit read+write so any interactive user on the machine can connect,
+    // mirroring the installer's SID-based approach for the service's own start/stop ACL.
+    [SupportedOSPlatform("windows")]
+    private NamedPipeServerStream CreatePipe()
+    {
+        var pipeSecurity = new PipeSecurity();
+        var usersSid = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+        pipeSecurity.AddAccessRule(new PipeAccessRule(usersSid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+
+        var authenticatedUsersSid = new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null);
+        pipeSecurity.AddAccessRule(new PipeAccessRule(authenticatedUsersSid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+
+        var systemSid = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+        pipeSecurity.AddAccessRule(new PipeAccessRule(systemSid, PipeAccessRights.FullControl, AccessControlType.Allow));
+
+        var adminsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        pipeSecurity.AddAccessRule(new PipeAccessRule(adminsSid, PipeAccessRights.FullControl, AccessControlType.Allow));
+
+        return NamedPipeServerStreamAcl.Create(
+            _pipeName,
+            PipeDirection.InOut,
+            NamedPipeServerStream.MaxAllowedServerInstances,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous,
+            inBufferSize: 0,
+            outBufferSize: 0,
+            pipeSecurity);
     }
 
     private async Task HandleClientAsync(NamedPipeServerStream pipe, ClientWriter writer, CancellationToken cancellationToken)

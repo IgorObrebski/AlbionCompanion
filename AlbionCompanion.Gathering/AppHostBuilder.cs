@@ -52,24 +52,36 @@ public static class AppHostBuilder
         return services.BuildServiceProvider();
     }
 
+    // Migration + WAL pragma + item-dictionary seed + raw-event retention cleanup. This must run
+    // once at Service startup regardless of whether Albion Online is running - it used to be
+    // folded into RunStartupSequenceAsync below, which only ran from inside the game-gated
+    // StartPipelineAsync path. On a fresh machine with the game closed, that left albion.db never
+    // created/migrated, so the App's CharacterHub/Sessions/SessionDetail pages all failed to load
+    // even though Settings reported the Service as "Running". Call this once, independently, from
+    // Worker.ExecuteAsync against a long-lived provider - not from the per-pipeline-start path.
+    public static async Task RunDatabaseStartupAsync(ServiceProvider provider)
+    {
+        using var migrationScope = provider.CreateScope();
+        var dbContext = migrationScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await dbContext.Database.MigrateAsync();
+        // Two OS processes (AlbionCompanion.Service and AlbionCompanion.App) now share this
+        // one SQLite file - WAL allows one writer plus many concurrent readers without
+        // SQLITE_BUSY/"database is locked", which the default rollback-journal mode doesn't.
+        await dbContext.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
+        await migrationScope.ServiceProvider.GetRequiredService<IItemDictionaryService>().SeedFromJsonAsync();
+
+        var rawEventCutoff = DateTime.UtcNow - RawGatheringEventRetention.Period;
+        await dbContext.RawGatheringEvents
+            .Where(e => e.Timestamp < rawEventCutoff)
+            .ExecuteDeleteAsync();
+    }
+
+    // Everything else needed to actually start capturing packets for a running gathering session:
+    // Npcap check/install, wiring parser/sniffer/tracker error logging, and starting the sniffer.
+    // Callers must have already run RunDatabaseStartupAsync (once, against a separate long-lived
+    // provider) before calling this - it no longer does its own migration/seed.
     public static async Task<IServiceScope> RunStartupSequenceAsync(ServiceProvider provider)
     {
-        using (var migrationScope = provider.CreateScope())
-        {
-            var dbContext = migrationScope.ServiceProvider.GetRequiredService<AppDbContext>();
-            await dbContext.Database.MigrateAsync();
-            // Two OS processes (AlbionCompanion.Service and AlbionCompanion.App) now share this
-            // one SQLite file - WAL allows one writer plus many concurrent readers without
-            // SQLITE_BUSY/"database is locked", which the default rollback-journal mode doesn't.
-            await dbContext.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
-            await migrationScope.ServiceProvider.GetRequiredService<IItemDictionaryService>().SeedFromJsonAsync();
-
-            var rawEventCutoff = DateTime.UtcNow - RawGatheringEventRetention.Period;
-            await dbContext.RawGatheringEvents
-                .Where(e => e.Timestamp < rawEventCutoff)
-                .ExecuteDeleteAsync();
-        }
-
         var npcapInstaller = provider.GetRequiredService<NpcapInstaller>();
         await npcapInstaller.EnsureInstalledAsync();
 

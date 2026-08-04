@@ -62,6 +62,7 @@ Console.WriteLine("Cleaning up old raw gathering events...");
 Console.WriteLine("Checking Npcap installation...");
 
 await using var provider = AppHostBuilder.BuildServiceProvider(appDataPath);
+await AppHostBuilder.RunDatabaseStartupAsync(provider);
 var sessionScope = await AppHostBuilder.RunStartupSequenceAsync(provider);
 
 Console.WriteLine("Network devices Npcap can see:");
