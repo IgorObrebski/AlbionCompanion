@@ -15,7 +15,15 @@ var newDbPath = Path.Combine(programDataPath, "albion.db");
 if (File.Exists(oldDbPath) && !File.Exists(newDbPath))
 {
     Console.WriteLine($"Migrating existing database from {oldDbPath} to {newDbPath}...");
-    File.Copy(oldDbPath, newDbPath);
+    try
+    {
+        File.Copy(oldDbPath, newDbPath);
+    }
+    catch (IOException ex)
+    {
+        Console.WriteLine($"ERROR: failed to migrate database from {oldDbPath} to {newDbPath}: {ex.Message}");
+        return 1;
+    }
 }
 
 // Step 2: copy the published Service binaries (this installer expects to be run from the same
@@ -28,19 +36,35 @@ if (!Directory.Exists(sourcePublishPath))
     return 1;
 }
 
-foreach (var file in Directory.GetFiles(sourcePublishPath, "*", SearchOption.AllDirectories))
+try
 {
-    var relative = Path.GetRelativePath(sourcePublishPath, file);
-    var destination = Path.Combine(serviceInstallPath, relative);
-    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-    File.Copy(file, destination, overwrite: true);
+    foreach (var file in Directory.GetFiles(sourcePublishPath, "*", SearchOption.AllDirectories))
+    {
+        var relative = Path.GetRelativePath(sourcePublishPath, file);
+        var destination = Path.Combine(serviceInstallPath, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Copy(file, destination, overwrite: true);
+    }
+}
+catch (IOException ex)
+{
+    Console.WriteLine($"ERROR: failed to copy service binaries from {sourcePublishPath} to {serviceInstallPath}: {ex.Message}");
+    Console.WriteLine("If the service is currently running, stop it first (its binaries may be locked).");
+    return 1;
 }
 
 var serviceExePath = Path.Combine(serviceInstallPath, "AlbionCompanion.Service.exe");
 
 // Step 3: register the service (idempotent - stop and delete first if it already exists, e.g. a
-// reinstall). Deleting a running service just marks it for deletion once stopped, so stop it first.
+// reinstall). Deleting a running service just marks it for deletion once stopped, so stop it first
+// and then poll until it actually reaches STOPPED - `sc stop` only initiates the stop and returns
+// immediately, it doesn't wait for the transition, so proceeding straight to `delete` can race a
+// service that's still shutting down and hit "marked for deletion" again.
 RunScAndWait($"stop {ServiceName}");
+if (!WaitForServiceStopped(ServiceName, TimeSpan.FromSeconds(10)))
+{
+    Console.WriteLine($"WARNING: {ServiceName} did not reach STOPPED state within 10s of `sc stop`; proceeding to delete anyway, but this may fail if the service is still shutting down.");
+}
 RunScAndWait($"delete {ServiceName}");
 var createResult = RunScAndWait($"create {ServiceName} binPath= \"{serviceExePath}\" start= auto");
 if (createResult != 0)
@@ -71,7 +95,12 @@ if (sdsetResult != 0)
     Console.WriteLine($"WARNING: `sc sdset` failed with exit code {sdsetResult}. The service was created but the current user may need admin rights (or a UAC prompt) to start/stop it from the App.");
 }
 
-RunScAndWait($"start {ServiceName}");
+var startResult = RunScAndWait($"start {ServiceName}");
+if (startResult != 0)
+{
+    Console.WriteLine($"ERROR: `sc start` failed with exit code {startResult}. The service was created and registered, but did not start - check for a missing runtime dependency or a bad binPath before assuming this installer succeeded.");
+    return 1;
+}
 
 Console.WriteLine("Done.");
 return 0;
@@ -82,10 +111,40 @@ static string GetCurrentUserSid()
     return identity.User!.Value;
 }
 
+static bool WaitForServiceStopped(string serviceName, TimeSpan timeout)
+{
+    var deadline = DateTime.UtcNow + timeout;
+    while (DateTime.UtcNow < deadline)
+    {
+        var process = Process.Start(new ProcessStartInfo("sc.exe", $"query {serviceName}") { UseShellExecute = false, RedirectStandardOutput = true })!;
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+
+        // If the service doesn't exist (first install) or is already stopped, there's nothing to
+        // wait for.
+        if (process.ExitCode != 0 || output.Contains("STOPPED", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        Thread.Sleep(500);
+    }
+
+    return false;
+}
+
 static int RunScAndWait(string arguments)
 {
-    var process = Process.Start(new ProcessStartInfo("sc.exe", arguments) { UseShellExecute = false, RedirectStandardOutput = true })!;
-    Console.WriteLine(process.StandardOutput.ReadToEnd());
-    process.WaitForExit();
-    return process.ExitCode;
+    try
+    {
+        var process = Process.Start(new ProcessStartInfo("sc.exe", arguments) { UseShellExecute = false, RedirectStandardOutput = true })!;
+        Console.WriteLine(process.StandardOutput.ReadToEnd());
+        process.WaitForExit();
+        return process.ExitCode;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"ERROR: failed to run `sc.exe {arguments}`: {ex.Message}");
+        return -1;
+    }
 }
