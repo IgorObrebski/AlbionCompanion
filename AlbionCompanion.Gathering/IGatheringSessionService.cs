@@ -2,7 +2,7 @@ using AlbionCompanion.Core.Models;
 
 namespace AlbionCompanion.Gathering;
 
-public interface IGatheringSessionService
+public interface IGatheringSessionService : LiveEvents.IGatheringLiveEventSource
 {
     Task StartSessionAsync(string location);
     Task EndSessionAsync();
@@ -11,13 +11,6 @@ public interface IGatheringSessionService
     Task AddSilverAsync(int amount);
     Task<GatheringSession?> GetActiveSessionAsync();
     Task<ActiveSessionSnapshot?> GetActiveSessionSnapshotAsync();
-
-    event EventHandler<GatheringSession>? OnSessionStarted;
-    event EventHandler<GatheringSession>? OnSessionEnded;
-    event EventHandler<GatheringSession>? OnLocationChanged;
-    event EventHandler<GatheredItem>? OnItemAdded;
-    event EventHandler<FameLog>? OnFameAdded;
-    event EventHandler<SilverLog>? OnSilverAdded;
 }
 
 // Everything IGatheringLiveState needs to rehydrate on startup when a session is already active
