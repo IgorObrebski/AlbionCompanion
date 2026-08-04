@@ -69,6 +69,20 @@ public class LiveEventPipeClient : IGatheringLiveEventSource, IDisposable
             return;
         }
 
+        // The guard is released from exactly one of two mutually exclusive places, and nowhere else:
+        // - a successful connect releases it itself, inside TryConnectAsync, right after
+        //   SetStatus(Connected) and before starting the read loop (see the comment there);
+        // - exhaustion (all MaxAttempts failed) releases it here, right after SetStatus(Exhausted),
+        //   as the very last thing this cycle does.
+        // There is deliberately no blanket "release it in a finally" on this outer method: a plain
+        // 0/1 flag carries no per-caller ownership token, so a generic release here has no way to
+        // tell "I still own this guard" apart from "a brand-new cycle already re-acquired it after
+        // I let go early" - and in the exact race that matters (an immediate drop right after this
+        // call's own successful connect kicks off a fresh reconnect cycle before this call unwinds),
+        // the guard's value really is 1, owned by that new cycle, so any conditional CAS here would
+        // succeed and stomp it just the same as an unconditional release would. Structuring it as
+        // "each outcome releases what it itself owns, and only that outcome" removes the ambiguity
+        // instead of trying to out-clever it.
         try
         {
             for (var attempt = 1; attempt <= MaxAttempts; attempt++)
@@ -86,18 +100,16 @@ public class LiveEventPipeClient : IGatheringLiveEventSource, IDisposable
             }
 
             SetStatus(ConnectionStatus.Exhausted);
+            Interlocked.Exchange(ref _connectingGuard, 0);
         }
-        finally
+        catch
         {
-            // Only release the guard if this call still actually owns it. TryConnectAsync now
-            // releases the guard itself right after a successful connect (before starting the read
-            // loop), so by the time we get here on the success path the guard may already have been
-            // taken by a brand-new reconnect cycle kicked off from ReadLoopAsync's own finally after
-            // an immediate drop. An unconditional Exchange(0) here would stomp that new cycle's
-            // ownership of the guard, letting a third, uncoordinated caller slip in concurrently with
-            // it - the same class of bug in a narrower spot. CompareExchange(0, 1) only clears the
-            // guard if it is still exactly the value this call itself set it to.
-            Interlocked.CompareExchange(ref _connectingGuard, 0, 1);
+            // Neither the success path (TryConnectAsync's own release) nor the exhaustion path
+            // above ran, so this cycle still owns the guard - release it here before propagating,
+            // otherwise a thrown exception (e.g. cancellation surfacing as OperationCanceledException
+            // from Task.Delay) would leave the guard permanently held with no cycle left to free it.
+            Interlocked.Exchange(ref _connectingGuard, 0);
+            throw;
         }
     }
 
