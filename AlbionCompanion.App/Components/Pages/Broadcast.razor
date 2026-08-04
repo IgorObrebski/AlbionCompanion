@@ -2,7 +2,6 @@
 @using AlbionCompanion.Gathering
 @using AlbionCompanion.Gathering.LiveEvents
 @inject IGatheringLiveState LiveState
-@inject LiveEventPipeClient PipeClient
 @implements IDisposable
 
 <a class="ac-back-link" href="@($"/characters/{CharacterId}")">
@@ -10,16 +9,7 @@
     Back
 </a>
 
-@if (PipeClient.Status == LiveEventPipeClient.ConnectionStatus.Exhausted)
-{
-    <div class="ac-banner ac-banner-warning">
-        Brak połączenia z serwisem nasłuchującym. <a href="/settings">Sprawdź Ustawienia</a>.
-    </div>
-}
-else if (PipeClient.Status != LiveEventPipeClient.ConnectionStatus.Connected)
-{
-    <div class="ac-banner ac-banner-info">Łączenie z serwisem...</div>
-}
+<ConnectionBanner />
 
 <p class="ac-subtitle" style="text-transform:uppercase; letter-spacing:0.08em; font-size:11px;">Broadcast</p>
 
@@ -138,18 +128,13 @@ else
     protected override void OnInitialized()
     {
         LiveState.OnChanged += HandleChanged;
-        PipeClient.OnStatusChanged += OnPipeStatusChanged;
     }
 
     private void HandleChanged(object? sender, EventArgs e) =>
         InvokeAsync(StateHasChanged);
 
-    private void OnPipeStatusChanged(object? sender, EventArgs e) =>
-        InvokeAsync(StateHasChanged);
-
     public void Dispose()
     {
         LiveState.OnChanged -= HandleChanged;
-        PipeClient.OnStatusChanged -= OnPipeStatusChanged;
     }
 }

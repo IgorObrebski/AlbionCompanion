@@ -5,18 +5,8 @@
 @inject ICharacterService CharacterService
 @inject LiveEventPipeClient PipeClient
 @inject NavigationManager Navigation
-@implements IDisposable
 
-@if (PipeClient.Status == LiveEventPipeClient.ConnectionStatus.Exhausted)
-{
-    <div class="ac-banner ac-banner-warning">
-        Brak połączenia z serwisem nasłuchującym. <a href="/settings">Sprawdź Ustawienia</a>.
-    </div>
-}
-else if (PipeClient.Status != LiveEventPipeClient.ConnectionStatus.Connected)
-{
-    <div class="ac-banner ac-banner-info">Łączenie z serwisem...</div>
-}
+<ConnectionBanner />
 
 <h1 style="font-size: 24px; margin-bottom: 4px;">Characters</h1>
 <p class="ac-subtitle">Pick a character to review its history, or wait for a session to start.</p>
@@ -134,12 +124,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        PipeClient.OnStatusChanged += OnPipeStatusChanged;
         await LoadAsync();
     }
-
-    private void OnPipeStatusChanged(object? sender, EventArgs e) =>
-        InvokeAsync(StateHasChanged);
 
     private void NavigateToCharacter(Guid characterId) =>
         Navigation.NavigateTo($"/characters/{characterId}");
@@ -235,10 +221,5 @@ else
         await PipeClient.SendCharacterRegistryChangedAsync();
         _deletingId = null;
         await LoadAsync();
-    }
-
-    public void Dispose()
-    {
-        PipeClient.OnStatusChanged -= OnPipeStatusChanged;
     }
 }

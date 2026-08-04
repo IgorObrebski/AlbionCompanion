@@ -1,0 +1,35 @@
+@using AlbionCompanion.Gathering.LiveEvents
+@inject LiveEventPipeClient PipeClient
+@implements IDisposable
+
+@* Shared by CharacterHub.razor and Broadcast.razor - previously this markup and its
+   OnStatusChanged subscribe/unsubscribe boilerplate were duplicated verbatim in both files, which
+   meant any future fix to the pipe-status banner (e.g. how Disconnected is worded) had to be
+   applied in two places and could drift. Disconnected renders the same actionable banner as
+   Exhausted - both mean "not currently receiving live events", and LiveEventPipeClient now retries
+   automatically after a drop, so the distinction isn't meaningful to the user. *@
+@if (PipeClient.Status is LiveEventPipeClient.ConnectionStatus.Exhausted or LiveEventPipeClient.ConnectionStatus.Disconnected)
+{
+    <div class="ac-banner ac-banner-warning">
+        Not connected to the sniffer service. <a href="/settings">Check Settings</a>.
+    </div>
+}
+else if (PipeClient.Status != LiveEventPipeClient.ConnectionStatus.Connected)
+{
+    <div class="ac-banner ac-banner-info">Connecting to service...</div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        PipeClient.OnStatusChanged += OnPipeStatusChanged;
+    }
+
+    private void OnPipeStatusChanged(object? sender, EventArgs e) =>
+        InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        PipeClient.OnStatusChanged -= OnPipeStatusChanged;
+    }
+}
