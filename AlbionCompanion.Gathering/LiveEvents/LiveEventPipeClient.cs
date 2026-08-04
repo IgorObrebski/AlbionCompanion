@@ -7,27 +7,29 @@ namespace AlbionCompanion.Gathering.LiveEvents;
 // implements IGatheringLiveEventSource so GatheringLiveState can subscribe to it exactly like it
 // subscribes to IGatheringSessionService - the App doesn't need to know whether the events came
 // from an in-process pipeline or a named pipe.
-public class LiveEventPipeClient : IGatheringLiveEventSource
+public class LiveEventPipeClient : IGatheringLiveEventSource, IDisposable
 {
     public enum ConnectionStatus { Disconnected, Connecting, Connected, Exhausted }
 
     private const int MaxAttempts = 5;
 
-    // Each connect attempt against a pipe nobody is listening on must fail well inside a single
-    // retryDelay-scaled test window, not sit on the .NET default-ish multi-second timeout. Real
-    // production use (retryDelay ~3s) still gets a generous per-attempt window (a few multiples of
-    // retryDelay, capped so it can never dwarf the interval between attempts); tests that pass a
-    // tiny retryDelay (e.g. 10ms) get a correspondingly tiny connect timeout, so 5 attempts + 4
-    // delays comfortably finish inside a 5s WaitAsync bound instead of the brief's hardcoded
-    // 3000ms-per-attempt version, which alone would take >=12s across 5 attempts and blow past any
-    // such bound.
-    private static readonly TimeSpan MaxConnectTimeout = TimeSpan.FromSeconds(1);
+    // 3000ms matches the brief's original intent for real usage: RetryNowAsync exists so the
+    // Settings page's "start service" button can retry right after the Windows Service process
+    // has just been launched - at that moment the named pipe may already exist but the server
+    // isn't yet actively blocked in WaitForConnectionAsync, so a real ConnectAsync can legitimately
+    // need to wait rather than fail instantly. This must NOT be derived from retryDelay - the two
+    // are independent concerns (how patient a single connection attempt is, versus how long to
+    // wait between attempts), and coupling them previously meant a test-sized retryDelay silently
+    // starved production-sized connect attempts of their patience. Tests that need to run fast
+    // pass a short connectTimeout explicitly, the same way they already override retryDelay.
+    private static readonly TimeSpan DefaultConnectTimeout = TimeSpan.FromMilliseconds(3000);
 
     private readonly string _pipeName;
     private readonly TimeSpan _retryDelay;
     private readonly TimeSpan _connectTimeout;
     private NamedPipeClientStream? _pipe;
     private StreamWriter? _writer;
+    private bool _disposed;
 
     public event EventHandler<GatheringSession>? OnSessionStarted;
     public event EventHandler<GatheringSession>? OnSessionEnded;
@@ -39,12 +41,11 @@ public class LiveEventPipeClient : IGatheringLiveEventSource
 
     public ConnectionStatus Status { get; private set; } = ConnectionStatus.Disconnected;
 
-    public LiveEventPipeClient(string pipeName, TimeSpan? retryDelay = null)
+    public LiveEventPipeClient(string pipeName, TimeSpan? retryDelay = null, TimeSpan? connectTimeout = null)
     {
         _pipeName = pipeName;
         _retryDelay = retryDelay ?? TimeSpan.FromSeconds(3);
-        var scaled = TimeSpan.FromTicks(_retryDelay.Ticks * 10);
-        _connectTimeout = scaled < MaxConnectTimeout ? (scaled <= TimeSpan.Zero ? MaxConnectTimeout : scaled) : MaxConnectTimeout;
+        _connectTimeout = connectTimeout ?? DefaultConnectTimeout;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -106,12 +107,29 @@ public class LiveEventPipeClient : IGatheringLiveEventSource
         }
         catch (Exception)
         {
-            // Timeout, no listener, or the pipe was busy - treated identically as "this attempt
-            // failed," the caller's loop decides whether to retry. Dispose the half-opened pipe
-            // instead of leaking it (ConnectAsync can throw after allocating OS resources).
+            // Intentionally broad: NamedPipeClientStream.ConnectAsync's failure modes for "this
+            // attempt failed" - TimeoutException (no listener within connectTimeout),
+            // IOException (pipe busy / all server instances taken), and OperationCanceledException
+            // (caller cancelled) - are all treated identically here, letting the caller's retry
+            // loop decide whether to try again. Dispose the half-opened pipe instead of leaking it
+            // (ConnectAsync can throw after allocating OS resources).
             pipe?.Dispose();
             return false;
         }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _writer?.Dispose();
+        _pipe?.Dispose();
+        _writer = null;
+        _pipe = null;
     }
 
     private async Task ReadLoopAsync(NamedPipeClientStream pipe, CancellationToken cancellationToken)
