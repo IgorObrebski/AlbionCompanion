@@ -73,14 +73,24 @@ if (createResult != 0)
     return 1;
 }
 
-// Step 4: grant the current interactive user START/STOP/QUERY/CHANGE-CONFIG rights, so the App's
-// Settings page never needs a UAC prompt to start/stop the service. Grants:
+// Step 4: grant the current interactive user START/STOP/QUERY rights, so the App's Settings page
+// never needs a UAC prompt to start/stop the service. Grants:
 //   SY (LocalSystem)            - full control, matches the OS default.
 //   BA (Administrators)         - full control, matches the OS default.
 //   IU (Interactive Users)      - query/enumerate/interrogate/read-control, matches the OS default.
-//   the current user's SID      - query, enumerate, start, stop, change-config, interrogate,
-//                                  user-defined-control, read-control.
+//   the current user's SID      - query-config, enumerate-dependents, enumerate-service,
+//                                  start, stop, interrogate, read-control. Deliberately does NOT
+//                                  include DC (SERVICE_CHANGE_CONFIG) - granting that to an
+//                                  unelevated interactive user is a local privilege escalation: it
+//                                  lets that user rewrite the service's binPath to any executable,
+//                                  which then runs as LocalSystem on the next start. The design only
+//                                  calls for start/stop/query rights, not config-change rights.
 //   SU (Service logon accounts) - query/enumerate/interrogate/read-control, matches the OS default.
+//
+// Two-letter SDDL codes used for the current user's ACE: CC=query-config, LC=enum-dependents,
+// SW=enum-service, RP=start, WP=stop, LO=list-object-names, CR=read-control, RC=read-control
+// (kept for parity with the other ACEs' trailing RC). DC (change-config), DT (pause/continue), and
+// WD (interrogate-as-write, i.e. broader than needed) are intentionally omitted.
 //
 // Verified: this SDDL string was round-tripped through .NET's
 // System.Security.AccessControl.RawSecurityDescriptor parser (the same SDDL grammar Win32's
@@ -88,7 +98,7 @@ if (createResult != 0)
 // producing the expected five ACEs. `sc sdset` itself could not be exercised against a live
 // service in this sandbox (no elevation available) - see task-15-report.md for details.
 var currentUserSid = GetCurrentUserSid();
-var sddl = $"D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWRPWPDCLOCRRC;;;{currentUserSid})(A;;CCLCSWLOCRRC;;;SU)";
+var sddl = $"D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWRPWPLOCRRC;;;{currentUserSid})(A;;CCLCSWLOCRRC;;;SU)";
 var sdsetResult = RunScAndWait($"sdset {ServiceName} \"{sddl}\"");
 if (sdsetResult != 0)
 {
