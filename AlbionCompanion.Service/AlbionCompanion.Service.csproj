@@ -17,4 +17,8 @@
     <ProjectReference Include="..\AlbionCompanion.Sniffer\AlbionCompanion.Sniffer.csproj" />
     <ProjectReference Include="..\AlbionCompanion.Gathering\AlbionCompanion.Gathering.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AlbionCompanion.Service.Tests" />
+  </ItemGroup>
 </Project>
