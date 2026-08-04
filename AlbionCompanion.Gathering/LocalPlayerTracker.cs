@@ -34,6 +34,7 @@ public class LocalPlayerTracker : ILocalPlayerTracker
     private const byte PlayerAnnounceNicknameParameterKey = 2;
 
     private readonly ICharacterService _characterService;
+    private HashSet<string>? _cachedCharacterNames;
 
     public int? CurrentEntityId { get; private set; }
     public string? CurrentCharacterName { get; private set; }
@@ -43,6 +44,7 @@ public class LocalPlayerTracker : ILocalPlayerTracker
     public LocalPlayerTracker(IPhotonParser photonParser, ICharacterService characterService)
     {
         _characterService = characterService;
+        _characterService.CharactersChanged += (_, _) => _cachedCharacterNames = null;
         photonParser.OnResponseReceived += (_, response) => HandleResponse(response);
         photonParser.OnEventReceived += (_, e) => _ = HandleEventAsync(e);
     }
@@ -93,8 +95,7 @@ public class LocalPlayerTracker : ILocalPlayerTracker
             }
 
             var isTrustedRefresh = CurrentCharacterName is not null && nickname == CurrentCharacterName;
-            var isColdStartMatch = CurrentCharacterName is null &&
-                (await _characterService.GetAllAsync()).Any(c => c.Name == nickname);
+            var isColdStartMatch = CurrentCharacterName is null && await IsRegisteredCharacterNameAsync(nickname);
 
             if (!isTrustedRefresh && !isColdStartMatch)
             {
@@ -108,6 +109,15 @@ public class LocalPlayerTracker : ILocalPlayerTracker
         {
             OnError?.Invoke(this, ex);
         }
+    }
+
+    // Cached so a crowded zone's stream of PlayerAnnounce broadcasts (one per nearby player) doesn't
+    // re-query the full character list on every single one while cold. Invalidated via
+    // CharactersChanged whenever the registered list actually changes (add/delete/rename).
+    private async Task<bool> IsRegisteredCharacterNameAsync(string nickname)
+    {
+        _cachedCharacterNames ??= (await _characterService.GetAllAsync()).Select(c => c.Name).ToHashSet();
+        return _cachedCharacterNames.Contains(nickname);
     }
 
     private static bool TryToUshort(object value, out ushort result)

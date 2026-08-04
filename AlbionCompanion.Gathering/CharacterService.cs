@@ -11,6 +11,8 @@ public class CharacterService : ICharacterService
 {
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
 
+    public event EventHandler? CharactersChanged;
+
     public CharacterService(IDbContextFactory<AppDbContext> dbContextFactory)
     {
         _dbContextFactory = dbContextFactory;
@@ -29,6 +31,7 @@ public class CharacterService : ICharacterService
         var character = new Character { Name = name, CreatedAt = DateTime.UtcNow };
         dbContext.Characters.Add(character);
         await dbContext.SaveChangesAsync();
+        CharactersChanged?.Invoke(this, EventArgs.Empty);
 
         return character;
     }
@@ -45,6 +48,7 @@ public class CharacterService : ICharacterService
 
         dbContext.Characters.Remove(character);
         await dbContext.SaveChangesAsync();
+        CharactersChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public async Task RenameAsync(Guid id, string newName)
@@ -59,6 +63,7 @@ public class CharacterService : ICharacterService
 
         character.Name = newName;
         await dbContext.SaveChangesAsync();
+        CharactersChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public async Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync()

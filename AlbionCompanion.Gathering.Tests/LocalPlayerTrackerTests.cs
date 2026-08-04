@@ -19,13 +19,26 @@ public class LocalPlayerTrackerTests
     private sealed class FakeCharacterService : ICharacterService
     {
         public List<Character> Characters { get; } = new();
+        public int GetAllAsyncCallCount { get; private set; }
 
-        public Task<IReadOnlyList<Character>> GetAllAsync() => Task.FromResult<IReadOnlyList<Character>>(Characters);
+        public event EventHandler? CharactersChanged;
+
+        public Task<IReadOnlyList<Character>> GetAllAsync()
+        {
+            GetAllAsyncCallCount++;
+            return Task.FromResult<IReadOnlyList<Character>>(Characters);
+        }
         public Task<Character> AddAsync(string name) => throw new NotImplementedException();
         public Task DeleteAsync(Guid id) => throw new NotImplementedException();
         public Task RenameAsync(Guid id, string newName) => throw new NotImplementedException();
         public Task<IReadOnlyList<CharacterOverview>> GetAllOverviewsAsync() => throw new NotImplementedException();
         public Task<CharacterOverview?> GetOverviewAsync(Guid characterId) => throw new NotImplementedException();
+
+        public void SimulateRegistrationChange(Character newCharacter)
+        {
+            Characters.Add(newCharacter);
+            CharactersChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private static PhotonResponse ZoneJoinResponse(int ownEntityId, string nickname = "Ejnsztain") =>
@@ -146,6 +159,46 @@ public class LocalPlayerTrackerTests
 
         Assert.Null(tracker.CurrentEntityId);
         Assert.Null(tracker.CurrentCharacterName);
+    }
+
+    [Fact]
+    public async Task PlayerAnnounce_BeforeAnyZoneJoin_RepeatedNonMatchingAnnounces_OnlyQueryCharactersOnce()
+    {
+        // Regression for the "dozens of DB round-trips/sec in a crowded city" gap: while cold
+        // (no zone-join yet), every nearby PlayerAnnounce used to re-query the full character list.
+        // The registered-name set should be cached after the first read.
+        var parser = new FakePhotonParser();
+        var characterService = new FakeCharacterService();
+        characterService.Characters.Add(new Character { Name = "Ejnsztain", CreatedAt = DateTime.UtcNow });
+        var tracker = new LocalPlayerTracker(parser, characterService);
+
+        parser.RaiseEvent(PlayerAnnounce(entityId: 41390, nickname: "SomeoneElse"));
+        await Task.Delay(10);
+        parser.RaiseEvent(PlayerAnnounce(entityId: 51391, nickname: "AnotherOne"));
+        await Task.Delay(10);
+
+        Assert.Equal(1, characterService.GetAllAsyncCallCount);
+    }
+
+    [Fact]
+    public async Task PlayerAnnounce_BeforeAnyZoneJoin_NicknameRegisteredAfterCacheWarmed_StillMatches()
+    {
+        // A character can be registered (via ICharacterService.AddAsync) after the tracker already
+        // cached an earlier (smaller) list - CharactersChanged must invalidate that cache instead
+        // of permanently rejecting a name added later.
+        var parser = new FakePhotonParser();
+        var characterService = new FakeCharacterService();
+        var tracker = new LocalPlayerTracker(parser, characterService);
+
+        parser.RaiseEvent(PlayerAnnounce(entityId: 999, nickname: "Unrelated"));
+        await Task.Delay(10);
+
+        characterService.SimulateRegistrationChange(new Character { Name = "Ejnsztain", CreatedAt = DateTime.UtcNow });
+        parser.RaiseEvent(PlayerAnnounce(entityId: 41390, nickname: "Ejnsztain"));
+        await Task.Delay(10);
+
+        Assert.Equal(41390, tracker.CurrentEntityId);
+        Assert.Equal("Ejnsztain", tracker.CurrentCharacterName);
     }
 
     [Fact]

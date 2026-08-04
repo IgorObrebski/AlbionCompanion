@@ -4,6 +4,10 @@ namespace AlbionCompanion.Gathering;
 
 public interface ICharacterService
 {
+    // Raised whenever the registered character list changes, so callers caching it (e.g.
+    // LocalPlayerTracker's cold-start name match) know to invalidate.
+    event EventHandler? CharactersChanged;
+
     Task<IReadOnlyList<Character>> GetAllAsync();
     Task<Character> AddAsync(string name);
     Task DeleteAsync(Guid id);

@@ -27,6 +27,8 @@ public class GatheringSessionServiceTests
     {
         private readonly List<Character> _characters = new();
 
+        public event EventHandler? CharactersChanged;
+
         public Task<IReadOnlyList<Character>> GetAllAsync() => Task.FromResult<IReadOnlyList<Character>>(_characters);
 
         public Task<Character> AddAsync(string name)

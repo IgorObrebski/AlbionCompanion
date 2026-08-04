@@ -27,6 +27,7 @@ public class RawEventRecorderTests
 
     private sealed class FakeCharacterService : ICharacterService
     {
+        public event EventHandler? CharactersChanged;
         public Task<IReadOnlyList<Character>> GetAllAsync() => Task.FromResult<IReadOnlyList<Character>>(Array.Empty<Character>());
         public Task<Character> AddAsync(string name) => throw new NotImplementedException();
         public Task DeleteAsync(Guid id) => throw new NotImplementedException();
