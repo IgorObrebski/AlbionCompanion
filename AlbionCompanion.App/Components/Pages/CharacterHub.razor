@@ -5,6 +5,7 @@
 @inject ICharacterService CharacterService
 @inject LiveEventPipeClient PipeClient
 @inject NavigationManager Navigation
+@implements IDisposable
 
 @if (PipeClient.Status == LiveEventPipeClient.ConnectionStatus.Exhausted)
 {
@@ -133,9 +134,12 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        PipeClient.OnStatusChanged += (_, _) => InvokeAsync(StateHasChanged);
+        PipeClient.OnStatusChanged += OnPipeStatusChanged;
         await LoadAsync();
     }
+
+    private void OnPipeStatusChanged(object? sender, EventArgs e) =>
+        InvokeAsync(StateHasChanged);
 
     private void NavigateToCharacter(Guid characterId) =>
         Navigation.NavigateTo($"/characters/{characterId}");
@@ -231,5 +235,10 @@ else
         await PipeClient.SendCharacterRegistryChangedAsync();
         _deletingId = null;
         await LoadAsync();
+    }
+
+    public void Dispose()
+    {
+        PipeClient.OnStatusChanged -= OnPipeStatusChanged;
     }
 }

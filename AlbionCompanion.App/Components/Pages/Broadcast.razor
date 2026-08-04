@@ -138,14 +138,18 @@ else
     protected override void OnInitialized()
     {
         LiveState.OnChanged += HandleChanged;
-        PipeClient.OnStatusChanged += (_, _) => InvokeAsync(StateHasChanged);
+        PipeClient.OnStatusChanged += OnPipeStatusChanged;
     }
 
     private void HandleChanged(object? sender, EventArgs e) =>
         InvokeAsync(StateHasChanged);
 
+    private void OnPipeStatusChanged(object? sender, EventArgs e) =>
+        InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
         LiveState.OnChanged -= HandleChanged;
+        PipeClient.OnStatusChanged -= OnPipeStatusChanged;
     }
 }
