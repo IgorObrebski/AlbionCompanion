@@ -6,6 +6,17 @@
 @inject LiveEventPipeClient PipeClient
 @inject NavigationManager Navigation
 
+@if (PipeClient.Status == LiveEventPipeClient.ConnectionStatus.Exhausted)
+{
+    <div class="ac-banner ac-banner-warning">
+        Brak połączenia z serwisem nasłuchującym. <a href="/settings">Sprawdź Ustawienia</a>.
+    </div>
+}
+else if (PipeClient.Status != LiveEventPipeClient.ConnectionStatus.Connected)
+{
+    <div class="ac-banner ac-banner-info">Łączenie z serwisem...</div>
+}
+
 <h1 style="font-size: 24px; margin-bottom: 4px;">Characters</h1>
 <p class="ac-subtitle">Pick a character to review its history, or wait for a session to start.</p>
 
@@ -120,7 +131,11 @@ else
     private string? _editError;
     private Guid? _deletingId;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        PipeClient.OnStatusChanged += (_, _) => InvokeAsync(StateHasChanged);
+        await LoadAsync();
+    }
 
     private void NavigateToCharacter(Guid characterId) =>
         Navigation.NavigateTo($"/characters/{characterId}");

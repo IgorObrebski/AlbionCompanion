@@ -584,6 +584,23 @@ html, body {
     animation: ac-flash-row 1.6s ease-out;
 }
 
+/* ---- banner ---- */
+.ac-banner {
+    padding: var(--ac-space-3) var(--ac-space-4);
+    border-radius: var(--ac-radius-md);
+    margin-bottom: var(--ac-space-4);
+}
+
+.ac-banner-warning {
+    background: color-mix(in srgb, #eab308 20%, transparent);
+    color: var(--ac-text);
+}
+
+.ac-banner-info {
+    background: color-mix(in srgb, var(--ac-text) 8%, transparent);
+    color: var(--ac-text-muted);
+}
+
 /* ---- back link ---- */
 .ac-back-link {
     display: inline-flex;
