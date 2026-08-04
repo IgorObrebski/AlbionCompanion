@@ -33,6 +33,7 @@ service over a local IPC channel.
 - The App degrades gracefully (shows history, disables live view) if the service isn't running.
 - A user can recover from an accidentally-stopped service without touching Services.msc, PowerShell,
   or Task Manager.
+- The Service doesn't burn resources when Albion Online isn't running.
 
 ## Non-goals
 
@@ -114,6 +115,29 @@ parameter — both hosts just pass a different path, no signature change needed.
 many readers without `SQLITE_BUSY`) — needed now that Service and App are two OS processes sharing
 one file, rather than one process's single `DbContextFactory`.
 
+## Process gating (idle when Albion isn't running)
+
+Running the capture pipeline 24/7 regardless of whether Albion Online is even open would waste
+resources whenever the machine is used for anything else. Rather than an OS-level "start on
+process launch" trigger (Task Scheduler's process-start triggers need Windows' process-creation
+auditing, Event ID 4688, enabled - fragile and disproportionate for this), the Service gates its
+own pipeline internally:
+
+- The Windows Service registration itself is unconditionally `Automatic`/always `Running` from the
+  SCM's point of view (matches the rest of this design - the Settings page's status check stays
+  simple).
+- Inside it, a new `IGameProcessWatcher` polls `Process.GetProcessesByName` every ~10-15s for the
+  game's processes - confirmed on this machine as **`Albion-Online.exe`** and
+  **`Albion-Online_BE.exe`** (the latter looks like a helper/backend process; watch for both so a
+  launch sequence that starts them in either order is still detected).
+- `Worker` only opens the Npcap capture device and starts `AlbionPhotonParser`/`ZoneTracker`/etc.
+  once the watcher reports the game is running; it tears the pipeline down (stops the sniffer,
+  disposes the session scope) when the watcher reports the game has exited. Between game sessions,
+  the Service process is alive but doing effectively nothing but the periodic process check.
+- `IGameProcessWatcher` is a thin interface purely so this polling can be faked in tests (a real
+  `Process.GetProcessesByName` call isn't practical to exercise from xUnit); the real
+  implementation is verified manually like the rest of the OS-boundary pieces in this design.
+
 ## Settings page
 
 New `Settings.razor`, linked from `NavMenu` alongside Characters/Sessions.
@@ -169,6 +193,9 @@ verified manually rather than unit-tested (same treatment `NpcapInstaller` alrea
 - `Settings.razor`'s status-driven UI logic (when to show the button, which message per status) —
   via a fake `IServiceStatusProvider`, since a real one requires an actual registered Windows
   Service in the SCM. The thin real implementation itself is verified manually.
+- `Worker`'s start/stop-pipeline-on-game-presence logic, via a fake `IGameProcessWatcher` (real
+  `Process.GetProcessesByName` isn't practical to exercise from a unit test) - verifies the
+  pipeline starts when the watcher reports the game present and tears down when it reports absent.
 
 **Requires manual verification on this machine (like Npcap's installer today):**
 - `AlbionCompanion.ServiceInstaller` end-to-end: file copy, `sc create`, `sc sdset` ACL grant,
