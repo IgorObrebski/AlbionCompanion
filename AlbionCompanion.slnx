@@ -6,6 +6,7 @@
   <Project Path="AlbionCompanion.Gathering.Tests/AlbionCompanion.Gathering.Tests.csproj" />
   <Project Path="AlbionCompanion.Gathering/AlbionCompanion.Gathering.csproj" />
   <Project Path="AlbionCompanion.Service/AlbionCompanion.Service.csproj" />
+  <Project Path="AlbionCompanion.ServiceInstaller/AlbionCompanion.ServiceInstaller.csproj" />
   <Project Path="AlbionCompanion.Sniffer.Tests/AlbionCompanion.Sniffer.Tests.csproj" />
   <Project Path="AlbionCompanion.Sniffer/AlbionCompanion.Sniffer.csproj" />
 </Solution>
