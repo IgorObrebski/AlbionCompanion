@@ -11,7 +11,7 @@ public static class MauiProgram
     public static ServiceProvider? GatheringProvider { get; private set; }
     public static IServiceScope? GatheringSessionScope { get; set; }
     public static IServiceProvider? Services { get; private set; }
-    public static string? AppDataPath { get; private set; }
+    public static string? ProgramDataPath { get; private set; }
 
     public static MauiApp CreateMauiApp()
     {
@@ -32,15 +32,19 @@ public static class MauiProgram
             GatheringProvider!.GetRequiredService<IItemDictionaryService>());
         builder.Services.AddSingleton<ICharacterService>(_ =>
             GatheringProvider!.GetRequiredService<ICharacterService>());
+        builder.Services.AddSingleton<IServiceStatusProvider>(_ =>
+            GatheringProvider!.GetRequiredService<IServiceStatusProvider>());
+        builder.Services.AddSingleton(_ =>
+            GatheringProvider!.GetRequiredService<AlbionCompanion.Gathering.LiveEvents.LiveEventPipeClient>());
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();
 #endif
 
-        AppDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AlbionCompanion");
-        Directory.CreateDirectory(AppDataPath);
-        GatheringProvider = AppHostBuilder.BuildServiceProvider(AppDataPath);
+        ProgramDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "AlbionCompanion");
+        Directory.CreateDirectory(ProgramDataPath);
+        GatheringProvider = AppClientHostBuilder.BuildServiceProvider(ProgramDataPath);
 
         var app = builder.Build();
         Services = app.Services;

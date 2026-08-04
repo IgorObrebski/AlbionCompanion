@@ -66,7 +66,6 @@
     <ItemGroup>
         <ProjectReference Include="..\AlbionCompanion.Core\AlbionCompanion.Core.csproj" />
         <ProjectReference Include="..\AlbionCompanion.Gathering\AlbionCompanion.Gathering.csproj" />
-        <ProjectReference Include="..\AlbionCompanion.Sniffer\AlbionCompanion.Sniffer.csproj" />
     </ItemGroup>
 
 </Project>

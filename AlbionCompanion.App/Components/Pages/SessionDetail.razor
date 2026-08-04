@@ -156,10 +156,10 @@ else
         }
         catch
         {
-            // Only expected on a first-ever launch, if the user navigates here before
-            // AppHostBuilder.RunStartupSequenceAsync's migration (running concurrently on a
-            // separate DbContext) has created the schema. Degrade to a retry message instead of
-            // an unhandled Blazor error.
+            // Only expected on a first-ever launch, if the App starts before
+            // AlbionCompanion.Service has run its startup migration against the shared database
+            // and created the schema. Degrade to a retry message instead of an unhandled Blazor
+            // error.
             _loadFailed = true;
         }
     }
