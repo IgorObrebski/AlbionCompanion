@@ -41,7 +41,7 @@ public partial class App : Application
             var sessionService = sessionScope.ServiceProvider.GetRequiredService<IGatheringSessionService>();
             if (MauiProgram.Services?.GetRequiredService<IGatheringLiveState>() is { } liveState)
             {
-                await liveState.Attach(sessionService);
+                await liveState.Attach(sessionService, sessionService);
             }
         }
         catch (Exception ex)

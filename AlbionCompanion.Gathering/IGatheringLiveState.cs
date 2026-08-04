@@ -22,5 +22,5 @@ public interface IGatheringLiveState
     // fire-and-forget StartGatheringAsync).
     event EventHandler<GatheringSession>? OnSessionStarted;
 
-    Task Attach(IGatheringSessionService sessionService);
+    Task Attach(IGatheringSessionService sessionService, LiveEvents.IGatheringLiveEventSource eventSource);
 }

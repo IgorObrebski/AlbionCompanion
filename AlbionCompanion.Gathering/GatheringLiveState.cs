@@ -1,4 +1,5 @@
 using AlbionCompanion.Core.Models;
+using AlbionCompanion.Gathering.LiveEvents;
 
 namespace AlbionCompanion.Gathering;
 
@@ -87,7 +88,7 @@ public class GatheringLiveState : IGatheringLiveState
     public event EventHandler? OnChanged;
     public event EventHandler<GatheringSession>? OnSessionStarted;
 
-    public async Task Attach(IGatheringSessionService sessionService)
+    public async Task Attach(IGatheringSessionService sessionService, IGatheringLiveEventSource eventSource)
     {
         // Rehydrate from the DB first: if the app was closed and relaunched while a session was
         // still open (e.g. the player stayed in open world across the restart), that session's row
@@ -125,7 +126,7 @@ public class GatheringLiveState : IGatheringLiveState
             OnChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        sessionService.OnSessionStarted += (_, session) => Safely(() =>
+        eventSource.OnSessionStarted += (_, session) => Safely(() =>
         {
             lock (_lock)
             {
@@ -141,7 +142,7 @@ public class GatheringLiveState : IGatheringLiveState
             }
         });
 
-        sessionService.OnSessionStarted += (_, session) =>
+        eventSource.OnSessionStarted += (_, session) =>
         {
             try
             {
@@ -154,7 +155,7 @@ public class GatheringLiveState : IGatheringLiveState
             }
         };
 
-        sessionService.OnSessionEnded += (_, _) => Safely(() =>
+        eventSource.OnSessionEnded += (_, _) => Safely(() =>
         {
             lock (_lock)
             {
@@ -162,7 +163,7 @@ public class GatheringLiveState : IGatheringLiveState
             }
         });
 
-        sessionService.OnLocationChanged += (_, session) => Safely(() =>
+        eventSource.OnLocationChanged += (_, session) => Safely(() =>
         {
             lock (_lock)
             {
@@ -170,7 +171,7 @@ public class GatheringLiveState : IGatheringLiveState
             }
         });
 
-        sessionService.OnItemAdded += (_, item) => Safely(() =>
+        eventSource.OnItemAdded += (_, item) => Safely(() =>
         {
             var key = (item.ItemId, item.Location);
             var amount = item.Amount;
@@ -180,7 +181,7 @@ public class GatheringLiveState : IGatheringLiveState
             }
         });
 
-        sessionService.OnFameAdded += (_, fameLog) => Safely(() =>
+        eventSource.OnFameAdded += (_, fameLog) => Safely(() =>
         {
             lock (_lock)
             {
@@ -189,7 +190,7 @@ public class GatheringLiveState : IGatheringLiveState
             }
         });
 
-        sessionService.OnSilverAdded += (_, silverLog) => Safely(() =>
+        eventSource.OnSilverAdded += (_, silverLog) => Safely(() =>
         {
             lock (_lock)
             {
