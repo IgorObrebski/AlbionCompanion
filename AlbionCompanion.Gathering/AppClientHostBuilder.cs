@@ -15,6 +15,12 @@ public static class AppClientHostBuilder
         var dbPath = Path.Combine(programDataPath, "albion.db");
 
         var services = new ServiceCollection();
+        // ItemDictionaryService's constructor needs this - dropped by mistake when this builder
+        // was split off from AppHostBuilder (which registers it for the sniffer pipeline's own
+        // needs). Never actually exercised until CharacterId resolution was fixed 2026-08-04 - the
+        // App had never rendered a real ItemTable before that, since every session's CharacterId
+        // was null.
+        services.AddSingleton<HttpClient>();
         services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
         services.AddDbContextFactory<AppDbContext>(options => options.UseSqlite($"Data Source={dbPath}"));
         services.AddSingleton<ICharacterService, CharacterService>();
