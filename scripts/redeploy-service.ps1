@@ -45,7 +45,7 @@ if (Test-Path $PublishPath) {
     Remove-Item -Recurse -Force $PublishPath
 }
 $serviceProject = Join-Path $RepoRoot "AlbionCompanion.Service\AlbionCompanion.Service.csproj"
-dotnet publish $serviceProject -c Debug -o $PublishPath
+dotnet publish $serviceProject -c Debug -r win-x64 --self-contained true -o $PublishPath
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Publish failed - service left stopped, old binaries still in place. Fix the build error and re-run." -ForegroundColor Red
     exit 1

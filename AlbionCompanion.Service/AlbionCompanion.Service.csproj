@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-AlbionCompanion.Service-ec360263-2f2d-49f0-ad5a-46a0c0ad5d10</UserSecretsId>
+    <!-- Runs as LocalSystem, which won't see a per-user (non machine-wide) .NET install - self-contained
+         bundles the runtime so the service never depends on a globally discoverable one. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
   </PropertyGroup>
 
   <ItemGroup>
