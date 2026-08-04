@@ -1,0 +1,68 @@
+@page "/settings"
+@using AlbionCompanion.Gathering
+@using AlbionCompanion.Gathering.LiveEvents
+@inject IServiceStatusProvider ServiceStatusProvider
+@inject LiveEventPipeClient PipeClient
+@implements IDisposable
+
+<h1 style="font-size: 24px; margin-bottom: 4px;">Settings</h1>
+
+<div class="ac-card" style="margin-bottom: var(--ac-space-4);">
+    <h2>Sniffer service</h2>
+    <p>Status: <strong>@_serviceStatus</strong></p>
+    @if (_serviceStatus == ServiceStatus.Stopped)
+    {
+        <button class="ac-button" @onclick="StartServiceAsync" disabled="@_starting">Uruchom serwis</button>
+    }
+    else if (_serviceStatus == ServiceStatus.NotInstalled)
+    {
+        <p class="ac-subtitle">Serwis nie jest zainstalowany - uruchom installer.exe.</p>
+    }
+</div>
+
+<div class="ac-card">
+    <h2>Połączenie live</h2>
+    <p>Status: <strong>@PipeClient.Status</strong></p>
+</div>
+
+@code {
+    private ServiceStatus _serviceStatus = ServiceStatus.Stopped;
+    private bool _starting;
+    private Timer? _pollTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshStatusAsync();
+        _pollTimer = new Timer(async _ => await RefreshStatusAsync(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        PipeClient.OnStatusChanged += OnPipeStatusChanged;
+    }
+
+    private async Task RefreshStatusAsync()
+    {
+        _serviceStatus = await ServiceStatusProvider.GetStatusAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task StartServiceAsync()
+    {
+        _starting = true;
+        try
+        {
+            await ServiceStatusProvider.StartAsync();
+            await RefreshStatusAsync();
+            _ = PipeClient.RetryNowAsync();
+        }
+        finally
+        {
+            _starting = false;
+        }
+    }
+
+    private void OnPipeStatusChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+        PipeClient.OnStatusChanged -= OnPipeStatusChanged;
+    }
+}
