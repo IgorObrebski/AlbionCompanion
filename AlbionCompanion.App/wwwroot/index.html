@@ -10,6 +10,19 @@
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="AlbionCompanion.App.styles.css" />
     <link rel="icon" href="data:,">
+    <script>
+        (function () {
+            var saved = localStorage.getItem('ac-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', saved);
+        })();
+        window.acSetTheme = function (theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('ac-theme', theme);
+        };
+        window.acGetTheme = function () {
+            return document.documentElement.getAttribute('data-theme') || 'dark';
+        };
+    </script>
 </head>
 
 <body>

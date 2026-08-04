@@ -1,10 +1,22 @@
-/* ===== AlbionCompanion theme ("Nocturne") =====
-   Design tokens lifted from the Claude Design mockup (2026-08-02, artifact 46a9fb49).
-   Only the dark palette exists so far - :root holds it directly rather than under a
-   [data-theme="dark"] selector so nothing breaks before a light palette + toggle exist.
-   When light mode is designed, move these into [data-theme="dark"] and add a
-   [data-theme="light"] block instead of touching every component rule below. */
+/* ===== AlbionCompanion theme ("Nocturne" dark / "Parchment" light) =====
+   Design tokens lifted from the Claude Design mockup (2026-08-02, artifact 46a9fb49) for dark;
+   the light ("Parchment") palette is a cream/beige counterpart added 2026-08-04 without a fresh
+   design session - same token names, same badge hues, just re-tuned for a light surface. Spacing/
+   radius/shadow tokens don't depend on the theme, so they live in :root once instead of being
+   duplicated in both blocks. Toggled via a `data-theme` attribute on <html>, defaulting to dark. */
 :root {
+    --ac-space-1: 4px;
+    --ac-space-2: 8px;
+    --ac-space-3: 12px;
+    --ac-space-4: 16px;
+    --ac-space-6: 24px;
+    --ac-space-8: 32px;
+    --ac-radius-sm: 4px;
+    --ac-radius-md: 8px;
+    --ac-radius-lg: 14px;
+}
+
+:root, [data-theme="dark"] {
     --ac-bg: #161826;
     --ac-surface: #1c1e2c;
     --ac-surface-raised: #232532;
@@ -60,23 +72,74 @@
     --ac-chart-cat-8: #e66767;
     --ac-chart-grid: color-mix(in srgb, var(--ac-text) 10%, transparent);
 
-    --ac-space-1: 4px;
-    --ac-space-2: 8px;
-    --ac-space-3: 12px;
-    --ac-space-4: 16px;
-    --ac-space-6: 24px;
-    --ac-space-8: 32px;
-    --ac-radius-sm: 4px;
-    --ac-radius-md: 8px;
-    --ac-radius-lg: 14px;
     --ac-shadow-sm: 0 0 0 1px color-mix(in srgb, var(--ac-text) 10%, transparent);
+    color-scheme: dark;
+}
+
+/* "Parchment": warm cream/beige, same structure as Nocturne. Tier/enchant *-fg values are
+   re-picked (darker shades of the same hue) rather than reused verbatim - the dark-theme fg
+   colors are light tints meant to sit on a near-black badge bg and are unreadable on cream. */
+[data-theme="light"] {
+    --ac-bg: #f3ecdd;
+    --ac-surface: #faf5ea;
+    --ac-surface-raised: #ffffff;
+    --ac-text: #332c1f;
+    --ac-text-muted: color-mix(in srgb, #332c1f 55%, transparent);
+    --ac-divider: color-mix(in srgb, #332c1f 14%, transparent);
+    --ac-accent: #8a7a5c;
+
+    --ac-active: #16803d;
+    --ac-ended: #8a8272;
+
+    --ac-tier-1-bg: color-mix(in srgb, #a1a1aa 26%, transparent);
+    --ac-tier-1-fg: #52525b;
+    --ac-tier-2-bg: color-mix(in srgb, #94a3b8 28%, transparent);
+    --ac-tier-2-fg: #334155;
+    --ac-tier-3-bg: color-mix(in srgb, #4ade80 26%, transparent);
+    --ac-tier-3-fg: #166534;
+    --ac-tier-4-bg: color-mix(in srgb, #60a5fa 26%, transparent);
+    --ac-tier-4-fg: #1d4ed8;
+    --ac-tier-5-bg: color-mix(in srgb, #c084fc 26%, transparent);
+    --ac-tier-5-fg: #7e22ce;
+    --ac-tier-6-bg: color-mix(in srgb, #fb923c 26%, transparent);
+    --ac-tier-6-fg: #c2410c;
+    --ac-tier-7-bg: color-mix(in srgb, #eab308 26%, transparent);
+    --ac-tier-7-fg: #a16207;
+    --ac-tier-8-bg: color-mix(in srgb, #f59e0b 30%, transparent);
+    --ac-tier-8-fg: #92400e;
+    --ac-tier-unknown-bg: color-mix(in srgb, #332c1f 12%, transparent);
+    --ac-tier-unknown-fg: var(--ac-text-muted);
+
+    --ac-enchant-1-bg: color-mix(in srgb, #4ade80 26%, transparent);
+    --ac-enchant-1-fg: #166534;
+    --ac-enchant-2-bg: color-mix(in srgb, #60a5fa 26%, transparent);
+    --ac-enchant-2-fg: #1d4ed8;
+    --ac-enchant-3-bg: color-mix(in srgb, #c084fc 26%, transparent);
+    --ac-enchant-3-fg: #7e22ce;
+    --ac-enchant-4-bg: color-mix(in srgb, #eab308 26%, transparent);
+    --ac-enchant-4-fg: #a16207;
+
+    /* Same hues as Nocturne's chart palette (kept identical on purpose - they're mid-tone enough
+       to read on cream too), just not re-validated against this specific surface. */
+    --ac-chart-magnitude: #3987e5;
+    --ac-chart-cat-1: #3987e5;
+    --ac-chart-cat-2: #d95926;
+    --ac-chart-cat-3: #199e70;
+    --ac-chart-cat-4: #c98500;
+    --ac-chart-cat-5: #d55181;
+    --ac-chart-cat-6: #008300;
+    --ac-chart-cat-7: #9085e9;
+    --ac-chart-cat-8: #e66767;
+    --ac-chart-grid: color-mix(in srgb, var(--ac-text) 10%, transparent);
+
+    --ac-shadow-sm: 0 0 0 1px color-mix(in srgb, var(--ac-text) 10%, transparent);
+    color-scheme: light;
 }
 
 html, body {
     background: var(--ac-bg);
     color: var(--ac-text);
     font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    color-scheme: dark;
 }
 
 /* ---- layout shell ---- */
@@ -127,6 +190,30 @@ html, body {
 
 .ac-navlink.active {
     background: color-mix(in srgb, var(--ac-text) 10%, transparent);
+    color: var(--ac-text);
+}
+
+.ac-theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--ac-space-2) var(--ac-space-3);
+    border-radius: var(--ac-radius-md);
+    border: none;
+    background: none;
+    color: var(--ac-text-muted);
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: auto;
+}
+
+.ac-theme-toggle svg {
+    flex: none;
+}
+
+.ac-theme-toggle:hover {
+    background: color-mix(in srgb, var(--ac-text) 6%, transparent);
     color: var(--ac-text);
 }
 
