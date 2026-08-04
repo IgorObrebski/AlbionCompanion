@@ -89,7 +89,15 @@ public class LiveEventPipeClient : IGatheringLiveEventSource, IDisposable
         }
         finally
         {
-            Interlocked.Exchange(ref _connectingGuard, 0);
+            // Only release the guard if this call still actually owns it. TryConnectAsync now
+            // releases the guard itself right after a successful connect (before starting the read
+            // loop), so by the time we get here on the success path the guard may already have been
+            // taken by a brand-new reconnect cycle kicked off from ReadLoopAsync's own finally after
+            // an immediate drop. An unconditional Exchange(0) here would stomp that new cycle's
+            // ownership of the guard, letting a third, uncoordinated caller slip in concurrently with
+            // it - the same class of bug in a narrower spot. CompareExchange(0, 1) only clears the
+            // guard if it is still exactly the value this call itself set it to.
+            Interlocked.CompareExchange(ref _connectingGuard, 0, 1);
         }
     }
 
