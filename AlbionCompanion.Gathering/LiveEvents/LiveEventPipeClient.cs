@@ -30,6 +30,7 @@ public class LiveEventPipeClient : IGatheringLiveEventSource, IDisposable
     private NamedPipeClientStream? _pipe;
     private StreamWriter? _writer;
     private bool _disposed;
+    private int _connectingGuard;
 
     public event EventHandler<GatheringSession>? OnSessionStarted;
     public event EventHandler<GatheringSession>? OnSessionEnded;
@@ -50,21 +51,46 @@ public class LiveEventPipeClient : IGatheringLiveEventSource, IDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        // No-op if already connected: without this guard, a stale UI click (e.g. Settings' retry
+        // button clicked twice in quick succession) could call StartAsync/RetryNowAsync while a
+        // connection is already live, and TryConnectAsync below would overwrite _pipe/_writer
+        // without disposing the previous ones - leaking the old pipe and starting a second
+        // ReadLoopAsync concurrently with the first.
+        if (Status == ConnectionStatus.Connected)
         {
-            SetStatus(ConnectionStatus.Connecting);
-            if (await TryConnectAsync(cancellationToken))
-            {
-                return;
-            }
-
-            if (attempt < MaxAttempts)
-            {
-                await Task.Delay(_retryDelay, cancellationToken);
-            }
+            return;
         }
 
-        SetStatus(ConnectionStatus.Exhausted);
+        // Guard against overlapping retry cycles - e.g. Settings' retry button clicked twice in
+        // quick succession, or the auto-reconnect kicked off from ReadLoopAsync's finally block
+        // racing a manual RetryNowAsync. Only one cycle runs at a time; a second caller just no-ops.
+        if (Interlocked.CompareExchange(ref _connectingGuard, 1, 0) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+            {
+                SetStatus(ConnectionStatus.Connecting);
+                if (await TryConnectAsync(cancellationToken))
+                {
+                    return;
+                }
+
+                if (attempt < MaxAttempts)
+                {
+                    await Task.Delay(_retryDelay, cancellationToken);
+                }
+            }
+
+            SetStatus(ConnectionStatus.Exhausted);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _connectingGuard, 0);
+        }
     }
 
     public Task RetryNowAsync(CancellationToken cancellationToken = default) => StartAsync(cancellationToken);
@@ -99,6 +125,16 @@ public class LiveEventPipeClient : IGatheringLiveEventSource, IDisposable
         {
             pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
             await pipe.ConnectAsync((int)_connectTimeout.TotalMilliseconds, cancellationToken);
+
+            // Dispose() may have run while ConnectAsync was still in flight. Without this check, a
+            // connect completing after disposal would still assign _pipe/_writer and start a read
+            // loop on an object the caller believes is already torn down.
+            if (_disposed)
+            {
+                pipe.Dispose();
+                return false;
+            }
+
             _pipe = pipe;
             _writer = new StreamWriter(pipe) { AutoFlush = true };
             SetStatus(ConnectionStatus.Connected);
@@ -159,6 +195,17 @@ public class LiveEventPipeClient : IGatheringLiveEventSource, IDisposable
         finally
         {
             SetStatus(ConnectionStatus.Disconnected);
+
+            // The design spec requires the retry loop to run "when the App launches AND whenever a
+            // connection drops" - previously this finally block only flipped status to Disconnected
+            // and nothing restarted the retry cycle, leaving the App stuck there forever (short of
+            // restarting the App) if the Service ever bounced. Kick off a fresh retry cycle here,
+            // unless the client itself was disposed or the caller's own token was cancelled (both
+            // mean the App is shutting this connection down on purpose, not recovering from a drop).
+            if (!_disposed && !cancellationToken.IsCancellationRequested)
+            {
+                _ = StartAsync(cancellationToken);
+            }
         }
     }
 
