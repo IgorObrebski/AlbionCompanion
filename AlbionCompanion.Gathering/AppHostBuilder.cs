@@ -58,6 +58,10 @@ public static class AppHostBuilder
         {
             var dbContext = migrationScope.ServiceProvider.GetRequiredService<AppDbContext>();
             await dbContext.Database.MigrateAsync();
+            // Two OS processes (AlbionCompanion.Service and AlbionCompanion.App) now share this
+            // one SQLite file - WAL allows one writer plus many concurrent readers without
+            // SQLITE_BUSY/"database is locked", which the default rollback-journal mode doesn't.
+            await dbContext.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
             await migrationScope.ServiceProvider.GetRequiredService<IItemDictionaryService>().SeedFromJsonAsync();
 
             var rawEventCutoff = DateTime.UtcNow - RawGatheringEventRetention.Period;
