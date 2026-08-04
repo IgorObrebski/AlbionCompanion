@@ -16,6 +16,7 @@ public class Worker : BackgroundService
 
     private readonly IGameProcessWatcher _gameProcessWatcher = new GameProcessWatcher();
     private readonly LiveEventPipeServer _pipeServer;
+    private readonly ServiceProvider _statusServiceProvider;
     private ServiceProvider? _pipelineProvider;
     private IServiceScope? _pipelineScope;
     private bool _pipelineRunning;
@@ -27,8 +28,13 @@ public class Worker : BackgroundService
         // pipeline's - it only needs write-free read access for NotifyCharactersChanged's
         // side-effect-free re-raise, and must stay alive across pipeline start/stop cycles
         // (unlike the pipeline's own scoped services), so it gets a small dedicated provider.
-        var statusProvider = AppHostBuilder.BuildServiceProvider(ProgramDataPath);
-        _pipeServer = new LiveEventPipeServer("AlbionCompanionLiveEvents", statusProvider.GetRequiredService<ICharacterService>());
+        // Kept as a field (not a local) so it can be disposed alongside the pipeline's own
+        // provider on shutdown - it owns real IDisposable resources (HttpClient,
+        // IDbContextFactory<AppDbContext>, IPacketSniffer, NpcapInstaller, etc.) via
+        // AppHostBuilder.BuildServiceProvider, and outliving the process without disposal
+        // would leak them for the whole service lifetime.
+        _statusServiceProvider = AppHostBuilder.BuildServiceProvider(ProgramDataPath);
+        _pipeServer = new LiveEventPipeServer("AlbionCompanionLiveEvents", _statusServiceProvider.GetRequiredService<ICharacterService>());
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -82,5 +88,22 @@ public class Worker : BackgroundService
         _pipelineProvider = null;
         _pipelineScope = null;
         _pipelineRunning = false;
+    }
+
+    public override void Dispose()
+    {
+        // ExecuteAsync already calls StopPipeline() on a clean cancellation, but Dispose is the
+        // one place guaranteed to run on every shutdown path (including if the host tears the
+        // service down before/without ExecuteAsync's own cleanup running) - StopPipeline is a
+        // no-op past the first call (_pipelineProvider/_pipelineScope are already null'd out), so
+        // calling it again here is harmless. _statusServiceProvider has no such guard elsewhere,
+        // so this is the only place it gets disposed.
+        if (_pipelineRunning)
+        {
+            StopPipeline();
+        }
+
+        _statusServiceProvider.Dispose();
+        base.Dispose();
     }
 }
