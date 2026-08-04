@@ -61,6 +61,53 @@ public class LiveEventPipeClientTests
     }
 
     [Fact]
+    public async Task StartAsync_WhenServerDropsConnectionImmediatelyAfterAccepting_AutomaticallyReconnects()
+    {
+        // Regression test for the reconnect-after-drop guard race: if the server accepts and then
+        // immediately closes the connection (simulating a Windows Service bouncing right after
+        // accepting a client), ReadLoopAsync's own finally block races the outer StartAsync call's
+        // unwind. Previously the outer StartAsync's connecting-guard release happened AFTER the read
+        // loop had already been started, so a fast-enough drop could have ReadLoopAsync's finally try
+        // to kick off a fresh retry cycle while the guard was still held - defeating the reconnect and
+        // leaving the client stuck in Disconnected forever.
+        var pipeName = "ImmediateDropPipe_" + Guid.NewGuid();
+        var server = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        var acceptTask = server.WaitForConnectionAsync();
+
+        var client = new LiveEventPipeClient(pipeName, retryDelay: TimeSpan.FromMilliseconds(10), connectTimeout: TimeSpan.FromSeconds(2));
+
+        var statuses = new List<LiveEventPipeClient.ConnectionStatus>();
+        var connectingAfterDropSignal = new TaskCompletionSource();
+        var sawConnectedOnce = false;
+        client.OnStatusChanged += (_, _) =>
+        {
+            statuses.Add(client.Status);
+            if (client.Status == LiveEventPipeClient.ConnectionStatus.Connected)
+            {
+                sawConnectedOnce = true;
+            }
+            else if (sawConnectedOnce && client.Status == LiveEventPipeClient.ConnectionStatus.Connecting)
+            {
+                connectingAfterDropSignal.TrySetResult();
+            }
+        };
+
+        var startTask = client.StartAsync(CancellationToken.None);
+
+        // Wait for the server to accept, then immediately drop the connection - the exact scenario
+        // that previously defeated the reconnect guard.
+        await acceptTask.WaitAsync(TimeSpan.FromSeconds(5));
+        server.Dispose();
+
+        // After the drop, the client must attempt to reconnect on its own - i.e. cycle back through
+        // Connecting - without any external caller (App restart, Settings button click) prompting it.
+        await connectingAfterDropSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(sawConnectedOnce);
+        client.Dispose();
+    }
+
+    [Fact]
     public async Task Dispose_AfterConnecting_ClosesThePipeWithoutThrowing()
     {
         var pipeName = "DisposeTestPipe_" + Guid.NewGuid();

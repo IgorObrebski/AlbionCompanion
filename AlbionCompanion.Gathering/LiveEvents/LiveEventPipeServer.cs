@@ -141,12 +141,19 @@ public class LiveEventPipeServer
     [SupportedOSPlatform("windows")]
     private NamedPipeServerStream CreatePipe()
     {
+        // ReadWrite alone (Read|Write) does not include SYNCHRONIZE. NamedPipeClientStream.ConnectAsync
+        // opens the pipe handle requesting GENERIC_READ|GENERIC_WRITE, whose Win32 generic-rights
+        // mapping for a named pipe includes SYNCHRONIZE - so against an explicit DACL that only grants
+        // ReadWrite, the client's CreateFile/connect can fail with UnauthorizedAccessException even
+        // though Read and Write are both nominally allowed. Add Synchronize explicitly to both
+        // interactive-user ACEs below. LocalSystem/Administrators' FullControl already includes
+        // Synchronize implicitly (FullControl is a superset of every right), so those are unaffected.
         var pipeSecurity = new PipeSecurity();
         var usersSid = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
-        pipeSecurity.AddAccessRule(new PipeAccessRule(usersSid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+        pipeSecurity.AddAccessRule(new PipeAccessRule(usersSid, PipeAccessRights.ReadWrite | PipeAccessRights.Synchronize, AccessControlType.Allow));
 
         var authenticatedUsersSid = new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null);
-        pipeSecurity.AddAccessRule(new PipeAccessRule(authenticatedUsersSid, PipeAccessRights.ReadWrite, AccessControlType.Allow));
+        pipeSecurity.AddAccessRule(new PipeAccessRule(authenticatedUsersSid, PipeAccessRights.ReadWrite | PipeAccessRights.Synchronize, AccessControlType.Allow));
 
         var systemSid = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
         pipeSecurity.AddAccessRule(new PipeAccessRule(systemSid, PipeAccessRights.FullControl, AccessControlType.Allow));

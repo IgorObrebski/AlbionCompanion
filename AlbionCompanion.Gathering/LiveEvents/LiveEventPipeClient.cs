@@ -138,6 +138,16 @@ public class LiveEventPipeClient : IGatheringLiveEventSource, IDisposable
             _pipe = pipe;
             _writer = new StreamWriter(pipe) { AutoFlush = true };
             SetStatus(ConnectionStatus.Connected);
+
+            // Release the connecting guard BEFORE starting the read loop, not after StartAsync's own
+            // finally block runs. ReadLoopAsync runs as a separately scheduled fire-and-forget task;
+            // if the connection drops immediately (e.g. the Service process bouncing right after
+            // accepting), ReadLoopAsync's own finally can race ahead of StartAsync's unwind-and-return
+            // and try to kick off a fresh retry cycle while the guard is still held by the outer
+            // StartAsync call - which would silently no-op and leave the client stuck in Disconnected
+            // forever. Releasing here guarantees the guard is free before the read loop can possibly
+            // observe a drop, so a genuine reconnect-after-drop always gets to run.
+            Interlocked.Exchange(ref _connectingGuard, 0);
             _ = ReadLoopAsync(pipe, cancellationToken);
             return true;
         }
